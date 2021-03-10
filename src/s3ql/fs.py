@@ -306,6 +306,14 @@ class Operations(pyfuse3.Operations):
                     raise FUSEError.EINVAL()
                 log.debug('updated cache size to %d bytes', self.cache.cache.max_size)
 
+            elif name == b'dirhardlink':
+                try:
+                    tup = parse_literal(value, (int, int))
+                except ValueError:
+                    log.warning('Received malformed command via control inode')
+                    raise FUSEError.EINVAL()
+                await self.link(*tup, None)
+
             else:
                 log.warning('Received unknown command via control inode')
                 raise FUSEError(errno.EINVAL)
