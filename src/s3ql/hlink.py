@@ -50,7 +50,7 @@ def main(args=None):
     if not os.path.exists(options.target):
         raise QuietError('Target directory %r does not exist' % options.target)
 
-    if not os.path.exists(options.linkname):
+    if os.path.exists(options.linkname):
         raise QuietError('Link name %r already exist.' % options.linkname)
 
     parent = os.path.dirname(os.path.abspath(options.linkname))
@@ -72,8 +72,11 @@ def main(args=None):
         raise QuietError('%s is a mount point.' % options.target)
 
     ctrlfile = assert_fs_owner(options.target)
-    pyfuse3.link(ctrlfile, 'dirhardlink',
-                 ('(%d, %d, %s)' % (fstat_t.st_ino, fstat_p.st_ino, options.linkname)).encode())
+    linkbasename = os.path.basename(options.linkname)
+    pyfuse3.setxattr(
+        ctrlfile, 'dirhardlink',
+        ('(%d, %d, "%s")' % (fstat_t.st_ino, fstat_p.st_ino,
+                             linkbasename)).encode())
 
 
 if __name__ == '__main__':

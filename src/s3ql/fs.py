@@ -308,11 +308,12 @@ class Operations(pyfuse3.Operations):
 
             elif name == b'dirhardlink':
                 try:
-                    tup = parse_literal(value, (int, int))
+                    targ_ino, lnkp_ino, lnk_name = parse_literal(value, (int, int, str))
+                    bytes_lnk_name = lnk_name.encode()
                 except ValueError:
                     log.warning('Received malformed command via control inode')
                     raise FUSEError.EINVAL()
-                await self.link(*tup, None)
+                await self.link(targ_ino, lnkp_ino, bytes_lnk_name, None)
 
             else:
                 log.warning('Received unknown command via control inode')
