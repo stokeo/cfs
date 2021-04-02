@@ -7,16 +7,14 @@ This work can be distributed under the terms of the GNU GPLv3.
 '''
 
 from .logging import logging, setup_logging, QuietError
-from . import fs, CURRENT_FS_REV
+from . import fs
 from .backends.pool import BackendPool
 from .block_cache import BlockCache
-from .common import (get_seq_no, get_backend_factory, load_params, save_params,
+from .common import (get_backend_factory,
                      is_mounted)
 from .daemonize import daemonize
-from .database import Connection
+from .database import SqliteMetaBackend
 from .inode_cache import InodeCache
-from .metadata import (download_metadata, upload_metadata, dump_and_upload_metadata,
-                       dump_metadata)
 from .parse_args import ArgumentParser
 from contextlib import AsyncExitStack
 import _thread
@@ -38,6 +36,7 @@ import shutil
 import atexit
 
 log = logging.getLogger(__name__)
+
 
 def install_thread_excepthook():
     """work around sys.excepthook thread bug
@@ -64,6 +63,7 @@ def install_thread_excepthook():
 
     threading.Thread.__init__ = init
 install_thread_excepthook()
+
 
 def main(args=None):
     '''Mount S3QL file system'''
@@ -173,7 +173,9 @@ async def main_async(options, stdout_log_handler):
 
     # Retrieve metadata
     with backend_pool() as backend:
-        (param, db) = get_metadata(backend, cachepath)
+        db = SqliteMetaBackend(backend=backend, cachepath=cachepath)
+        param = db.param
+
 
     #if param['max_obj_size'] < options.min_obj_size:
     #    raise QuietError('Maximum object size must be bigger than minimum object size.',
@@ -192,13 +194,13 @@ async def main_async(options, stdout_log_handler):
     if options.nfs:
         # NFS may try to look up '..', so we have to speed up this kind of query
         log.info('Creating NFS indices...')
-        db.execute('CREATE INDEX IF NOT EXISTS ix_contents_inode ON contents(inode)')
+        db.make_nfsindex()
 
     else:
-        db.execute('DROP INDEX IF EXISTS ix_contents_inode')
+        db.del_nfsindex()
 
-    metadata_upload_task = MetadataUploadTask(backend_pool, param, db,
-                                              options.metadata_upload_interval)
+    metadata_upload_task = db.metadata_upload_task(
+        backend_pool, options.metadata_upload_interval)
 
     async with trio.open_nursery() as nursery:
       async with AsyncExitStack() as cm:
@@ -237,7 +239,7 @@ async def main_async(options, stdout_log_handler):
             faulthandler.register(signal.SIGUSR1, file=crit_log_fd)
             daemonize(options.cachedir)
 
-        mark_metadata_dirty(backend, cachepath, param)
+        db.mark_metadata_dirty()
 
         block_cache.init(options.threads)
 
@@ -291,36 +293,11 @@ async def main_async(options, stdout_log_handler):
 
     # At this point, there should be no other threads left
 
-    # Do not update .params yet, dump_metadata() may fail if the database is
-    # corrupted, in which case we want to force an fsck.
+    # Do not update .params yet, dump_metadata() may fail if the database
+    # is corrupted, in which case we want to force an fsck.
     if operations.failsafe:
         log.warning('File system errors encountered, marking for fsck.')
         param['needs_fsck'] = True
-    with backend_pool() as backend:
-        seq_no = get_seq_no(backend)
-        if metadata_upload_task.db_mtime == os.stat(cachepath + '.db').st_mtime:
-            log.info('File system unchanged, not uploading metadata.')
-            del backend['s3ql_seq_no_%d' % param['seq_no']]
-            param['seq_no'] -= 1
-            save_params(cachepath, param)
-        elif seq_no == param['seq_no']:
-            param['last-modified'] = time.time()
-            dump_and_upload_metadata(backend, db, param)
-            save_params(cachepath, param)
-        else:
-            log.error('Remote metadata is newer than local (%d vs %d), '
-                      'refusing to overwrite!', seq_no, param['seq_no'])
-            log.error('The locally cached metadata will be *lost* the next time the file system '
-                      'is mounted or checked and has therefore been backed up.')
-            for name in (cachepath + '.params', cachepath + '.db'):
-                for i in range(4)[::-1]:
-                    if os.path.exists(name + '.%d' % i):
-                        os.rename(name + '.%d' % i, name + '.%d' % (i + 1))
-                os.rename(name, name + '.0')
-
-    log.info('Cleaning up local metadata...')
-    db.execute('ANALYZE')
-    db.execute('VACUUM')
     db.close()
 
     log.info('All done.')
@@ -402,74 +379,6 @@ def determine_threads(options):
         log.info("Using %d upload threads.", threads)
         return threads
 
-def get_metadata(backend, cachepath):
-    '''Retrieve metadata'''
-
-    seq_no = get_seq_no(backend)
-
-    # When there was a crash during metadata rotation, we may end up
-    # without an s3ql_metadata object.
-    meta_obj_name = 's3ql_metadata'
-    if meta_obj_name not in backend:
-        meta_obj_name += '_new'
-
-    # Check for cached metadata
-    db = None
-    if os.path.exists(cachepath + '.params'):
-        param = load_params(cachepath)
-        if param['seq_no'] < seq_no:
-            log.info('Ignoring locally cached metadata (outdated).')
-            param = backend.lookup(meta_obj_name)
-        elif param['seq_no'] > seq_no:
-            raise QuietError("File system not unmounted cleanly, run fsck!",
-                             exitcode=30)
-        else:
-            log.info('Using cached metadata.')
-            db = Connection(cachepath + '.db')
-    else:
-        param = backend.lookup(meta_obj_name)
-
-    # Check for unclean shutdown
-    if param['seq_no'] < seq_no:
-        raise QuietError('Backend reports that fs is still mounted elsewhere, aborting.',
-                         exitcode=31)
-
-    # Check revision
-    if param['revision'] < CURRENT_FS_REV:
-        raise QuietError('File system revision too old, please run `s3qladm upgrade` first.',
-                         exitcode=32)
-    elif param['revision'] > CURRENT_FS_REV:
-        raise QuietError('File system revision too new, please update your '
-                         'S3QL installation.', exitcode=33)
-
-    # Check that the fs itself is clean
-    if param['needs_fsck']:
-        raise QuietError("File system damaged or not unmounted cleanly, run fsck!",
-                         exitcode=30)
-    if time.time() - param['last_fsck'] > 60 * 60 * 24 * 31:
-        log.warning('Last file system check was more than 1 month ago, '
-                 'running fsck.s3ql is recommended.')
-
-    # Download metadata
-    if not db:
-        db = download_metadata(backend, cachepath + '.db')
-
-        # Drop cache
-        if os.path.exists(cachepath + '-cache'):
-            shutil.rmtree(cachepath + '-cache')
-
-    save_params(cachepath, param)
-
-    return (param, db)
-
-def mark_metadata_dirty(backend, cachepath, param):
-    '''Mark metadata as dirty and increase sequence number'''
-
-    param['seq_no'] += 1
-    param['needs_fsck'] = True
-    save_params(cachepath, param)
-    backend['s3ql_seq_no_%d' % param['seq_no']] = b'Empty'
-    param['needs_fsck'] = False
 
 def get_fuse_opts(options):
     '''Return fuse options for given command line options'''
@@ -596,84 +505,6 @@ def parse_args(args):
 
     return options
 
-class MetadataUploadTask:
-    '''
-    Periodically upload metadata. Upload is done every `interval`
-    seconds, and whenever `event` is set. To terminate thread,
-    set `quit` attribute as well as `event` event.
-    '''
-
-    def __init__(self, backend_pool, param, db, interval):
-        super().__init__()
-        self.backend_pool = backend_pool
-        self.param = param
-        self.db = db
-        self.interval = interval
-        self.db_mtime = os.stat(db.file).st_mtime
-        self.event = trio.Event()
-        self.quit = False
-
-        # Can't assign in constructor, because Operations instance needs
-        # access to self.event as well.
-        self.fs = None
-
-    async def run(self):
-        log.debug('started')
-
-        assert self.fs is not None
-
-        while not self.quit:
-            if self.interval is None:
-                await self.event.wait()
-            else:
-                with trio.move_on_after(self.interval):
-                    await self.event.wait()
-            self.event = trio.Event()  # reset
-            if self.quit:
-                break
-
-            new_mtime = os.stat(self.db.file).st_mtime
-            if self.db_mtime == new_mtime:
-                log.info('File system unchanged, not uploading metadata.')
-                continue
-
-            log.info('Dumping metadata...')
-            fh = tempfile.TemporaryFile()
-            dump_metadata(self.db, fh)
-
-            with self.backend_pool() as backend:
-                seq_no = get_seq_no(backend)
-                if seq_no > self.param['seq_no']:
-                    log.error('Remote metadata is newer than local (%d vs %d), '
-                              'refusing to overwrite and switching to failsafe mode!',
-                              seq_no, self.param['seq_no'])
-                    self.fs.failsafe = True
-                    fh.close()
-                    break
-
-                fh.seek(0)
-                self.param['last-modified'] = time.time()
-
-                # Temporarily decrease sequence no, this is not the final upload
-                self.param['seq_no'] -= 1
-                await trio.to_thread.run_sync(
-                    upload_metadata, backend, fh, self.param)
-                self.param['seq_no'] += 1
-
-                fh.close()
-                self.db_mtime = new_mtime
-
-        # Break reference loop
-        self.fs = None
-
-        log.debug('finished')
-
-    def stop(self):
-        '''Signal thread to terminate'''
-
-        log.debug('started')
-        self.quit = True
-        self.event.set()
 
 def setup_exchook():
     '''Terminate FUSE main loop if any thread terminates with an exception

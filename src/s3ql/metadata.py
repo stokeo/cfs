@@ -6,7 +6,7 @@ Copyright © 2008 Nikolaus Rath <Nikolaus@rath.org>
 This work can be distributed under the terms of the GNU GPLv3.
 '''
 
-from .logging import logging # Ensure use of custom logger class
+from .logging import logging  # Ensure use of custom logger class
 from .database import Connection
 from . import BUFSIZE
 from .common import pretty_print_size
@@ -26,10 +26,10 @@ DUMP_SPEC = [
                                 ('refcount', INTEGER))),
 
              ('blocks', 'id', (('id', INTEGER, 1),
-                             ('hash', BLOB, 32),
-                             ('size', INTEGER),
-                             ('obj_id', INTEGER, 1),
-                             ('refcount', INTEGER))),
+                               ('hash', BLOB, 32),
+                               ('size', INTEGER),
+                               ('obj_id', INTEGER, 1),
+                               ('refcount', INTEGER))),
 
              ('inodes', 'id', (('id', INTEGER, 1),
                                ('uid', INTEGER),
@@ -64,7 +64,6 @@ DUMP_SPEC = [
                                           ('name_id', INTEGER),
                                           ('value', BLOB))),
 ]
-
 
 
 def restore_metadata(fh, dbfile):
@@ -106,6 +105,7 @@ def restore_metadata(fh, dbfile):
     os.rename(tmpfile, dbfile)
 
     return Connection(dbfile)
+
 
 def cycle_metadata(backend, keep=10):
     '''Rotate metadata backups'''

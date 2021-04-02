@@ -33,6 +33,7 @@ log = logging.getLogger(__name__)
 S_IFMT = (stat.S_IFDIR | stat.S_IFREG | stat.S_IFSOCK | stat.S_IFBLK |
           stat.S_IFCHR | stat.S_IFIFO | stat.S_IFLNK)
 
+
 class Fsck(object):
 
     def __init__(self, cachedir_, backend_, param, conn):
@@ -1313,6 +1314,7 @@ def to_str(name):
     '''Decode path name for printing'''
 
     return str(name, encoding='utf-8', errors='replace')
+
 
 if __name__ == '__main__':
     main(sys.argv[1:])
