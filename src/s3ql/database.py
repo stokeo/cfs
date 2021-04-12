@@ -291,10 +291,232 @@ class SqliteMetaBackend(object):
             os.close(dirfd)
 
     def make_nfsindex(self):
-        self.db.execute('CREATE INDEX IF NOT EXISTS ix_contents_inode ON contents(inode)')
+        self.db.execute(
+            'CREATE INDEX IF NOT EXISTS ix_contents_inode ON contents(inode)')
 
     def del_nfsindex(self):
         self.db.execute('DROP INDEX IF EXISTS ix_contents_inode')
+
+    def blocks_count(self):
+        return self.db.get_val("SELECT COUNT(id) FROM objects")
+
+    def inodes_count(self):
+        return self.db.get_val("SELECT COUNT(id) FROM inodes")
+
+    def fs_size(self):
+        return self.db.get_val('SELECT SUM(size) FROM blocks')
+
+    def parent_inode(self, inodeid):
+        return self.db.get_val(
+            "SELECT parent_inode FROM contents WHERE inode=?",
+            (inodeid,))
+
+    def lookup_dirent_inode(self, dir_inode, name):
+        return self.db.get_val(
+            "SELECT inode FROM contents_v WHERE name=? AND parent_inode=?",
+            (name, dir_inode))
+
+    def readlink(self, inodeid):
+        return self.db.get_val(
+            "SELECT target FROM symlink_targets WHERE inode=?",
+            (inodeid,))
+
+    def readdir(self, inodeid, off):
+        return self.db.query(
+            "SELECT name_id, name, inode FROM contents_v "
+            'WHERE parent_inode=? AND name_id > ? ORDER BY name_id',
+            (inodeid, off-3))
+
+    def getxattr(self, inodeid, name):
+        return self.db.get_val(
+            'SELECT value FROM ext_attributes_v WHERE inode=? AND name=?',
+            (inodeid, name))
+
+    def listxattr(self, inodeid):
+        return self.db.query('SELECT name FROM ext_attributes_v WHERE inode=?',
+                             (inodeid,))
+
+    def setxattr(self, inodeid, name, value):
+        return self.db.execute(
+            'INSERT OR REPLACE INTO ext_attributes (inode, name_id, value) '
+            'VALUES(?, ?, ?)', (inodeid, name, value))
+
+    def removexattr(self, inodeid, name_id):
+        return self.db.execute(
+            'DELETE FROM ext_attributes WHERE inode=? AND name_id=?',
+            (inodeid, name_id))
+
+    def link(self, name, inodeid, parent_inode_id):
+        self.db.execute(
+            "INSERT INTO contents (name_id, inode, parent_inode) VALUES(?,?,?)",
+            (self.add_name(name), inodeid, parent_inode_id))
+
+    def symlink(self, inodeid, target):
+        self.db.execute('INSERT INTO symlink_targets (inode, target) VALUES(?,?)',
+                        (inodeid, target))
+
+    def list_directory(self, parent_inode, off):
+        return self.db.query(
+            'SELECT name_id, inode FROM contents WHERE parent_inode=? '
+            'AND name_id > ? ORDER BY name_id', (parent_inode, off))
+
+    def is_directory(self, inodeid):
+        return self.db.has_val('SELECT 1 FROM contents WHERE parent_inode=?',
+                               (inodeid,))
+
+    def batch_list_dir(self, batch_size, parent_inode):
+        return self.db.get_list(
+            'SELECT name, name_id, inode FROM contents_v WHERE '
+            'parent_inode=? LIMIT %d' % batch_size, (parent_inode,))
+
+    def copy_tree_files(self, cur_id, new_id):
+        self.db.execute('INSERT INTO symlink_targets (inode, target) '
+                        'SELECT ?, target FROM symlink_targets WHERE inode=?',
+                        (new_id, cur_id))
+        self.db.execute('INSERT INTO ext_attributes (inode, name_id, value) '
+                        'SELECT ?, name_id, value FROM ext_attributes WHERE inode=?',
+                        (new_id, cur_id))
+        self.db.execute('UPDATE names SET refcount = refcount + 1 WHERE '
+                        'id IN (SELECT name_id FROM ext_attributes WHERE inode=?)',
+                        (cur_id,))
+
+        processed = self.db.execute(
+            'INSERT INTO inode_blocks (inode, blockno, block_id) '
+            'SELECT ?, blockno, block_id FROM inode_blocks '
+            'WHERE inode=?', (new_id, cur_id))
+        self.db.execute(
+            'REPLACE INTO blocks (id, hash, refcount, size, obj_id) '
+            'SELECT id, hash, refcount+COUNT(id), size, obj_id '
+            'FROM inode_blocks JOIN blocks ON block_id = id '
+            'WHERE inode = ? GROUP BY id', (new_id,))
+        return processed
+
+    def copy_tree_dirs(self, name_id, id_new, target_id):
+        self.db.execute(
+            'INSERT INTO contents (name_id, inode, parent_inode) VALUES(?, ?, ?)',
+            (name_id, id_new, target_id))
+        self.db.execute('UPDATE names SET refcount=refcount+1 WHERE id=?',
+                        (name_id,))
+
+    def make_copy_visible(self, inodeid, tmpid):
+        self.db.execute('UPDATE contents SET parent_inode=? WHERE parent_inode=?',
+                        (inodeid, tmpid))
+
+    def delete_dirent(self, name, parent_inode):
+        self.db.execute(
+            "DELETE FROM contents WHERE name_id=? AND parent_inode=?",
+            (name, parent_inode))
+
+    def delete_inode(self, inodeid):
+        self.db.execute(
+            'UPDATE names SET refcount = refcount - 1 WHERE '
+            'id IN (SELECT name_id FROM ext_attributes WHERE inode=?)',
+            (inodeid,))
+        self.db.execute(
+            'DELETE FROM names WHERE refcount=0 AND '
+            'id IN (SELECT name_id FROM ext_attributes WHERE inode=?)',
+            (inodeid,))
+        self.db.execute('DELETE FROM ext_attributes WHERE inode=?', (inodeid,))
+        self.db.execute('DELETE FROM symlink_targets WHERE inode=?',
+                        (inodeid,))
+
+    def add_name(self, name):
+        '''Get id for *name* and increase refcount
+
+        Name is inserted in table if it does not yet exist.
+        '''
+        try:
+            name_id = self.db.get_val('SELECT id FROM names WHERE name=?',
+                                      (name,))
+        except NoSuchRowError:
+            name_id = self.db.rowid(
+                'INSERT INTO names (name, refcount) VALUES(?,?)', (name, 1))
+        else:
+            self.db.execute('UPDATE names SET refcount=refcount+1 WHERE id=?',
+                            (name_id,))
+        return name_id
+
+    def del_name(self, name):
+        '''Decrease refcount for *name*
+
+        Name is removed from table if refcount drops to zero. Returns the
+        (possibly former) id of the name.
+        '''
+        (name_id, refcount) = self.db.get_row(
+            'SELECT id, refcount FROM names WHERE name=?', (name,))
+
+        if refcount > 1:
+            self.db.execute('UPDATE names SET refcount=refcount-1 WHERE id=?',
+                            (name_id,))
+        else:
+            self.db.execute('DELETE FROM names WHERE id=?', (name_id,))
+
+        return name_id
+
+    def rename(self, id_p_old, name_old, id_p_new, name_new):
+        name_id_new = self.add_name(name_new)
+        name_id_old = self.del_name(name_old)
+
+        self.db.execute(
+            "UPDATE contents SET name_id=?, parent_inode=? WHERE name_id=? "
+            "AND parent_inode=?", (name_id_new, id_p_new,
+                                   name_id_old, id_p_old))
+
+        return name_id_new, name_id_old
+
+    def replace_target(self, name_new, name_old, id_old, id_p_old, id_p_new):
+        name_id_new = self.get_val('SELECT id FROM names WHERE name=?',
+                                   (name_new,))
+        self.db.execute(
+            "UPDATE contents SET inode=? WHERE name_id=? AND parent_inode=?",
+            (id_old, name_id_new, id_p_new))
+
+        # Delete old name
+        name_id_old = self.del_name(name_old)
+        self.db.execute('DELETE FROM contents WHERE name_id=? AND parent_inode=?',
+                        (name_id_old, id_p_old))
+
+    def replace_delete_inode(self, inodeid):
+        self.db.execute('UPDATE names SET refcount = refcount - 1 WHERE '
+                        'id IN (SELECT name_id FROM ext_attributes WHERE inode=?)',
+                        (inodeid,))
+        self.db.execute('DELETE FROM names WHERE refcount=0')
+        self.db.execute('DELETE FROM ext_attributes WHERE inode=?', (inodeid,))
+        self.db.execute('DELETE FROM symlink_targets WHERE inode=?',
+                        (inodeid,))
+
+    def extstat(self):
+        entries = self.db.get_val("SELECT COUNT(rowid) FROM contents")
+        blocks = self.db.get_val("SELECT COUNT(id) FROM objects")
+        inodes = self.db.get_val("SELECT COUNT(id) FROM inodes")
+        fs_size = self.db.get_val('SELECT SUM(size) FROM inodes') or 0
+        dedup_size = self.db.get_val('SELECT SUM(size) FROM blocks') or 0
+
+        # Objects that are currently being uploaded/compressed have size == -1
+        compr_size = self.db.get_val('SELECT SUM(size) FROM objects '
+                                     'WHERE size > 0') or 0
+
+        return (entries, blocks, inodes, fs_size, dedup_size, compr_size,
+                self.db.get_size())
+
+    def create_inode(self, name, parent_inode):
+        return self.db.get_val(
+            "SELECT inode FROM contents_v WHERE name=? AND parent_inode=?",
+            (name, parent_inode))
+
+    def forget(self, inodeid):
+        # Since the inode is not open, it's not possible that new blocks
+        # get created at this point and we can safely delete the inode
+        self.db.execute(
+            'UPDATE names SET refcount = refcount - 1 WHERE '
+            'id IN (SELECT name_id FROM ext_attributes WHERE inode=?)',
+            (inodeid,))
+        self.db.execute(
+            'DELETE FROM names WHERE refcount=0 AND '
+            'id IN (SELECT name_id FROM ext_attributes WHERE inode=?)',
+            (inodeid,))
+        self.db.execute('DELETE FROM ext_attributes WHERE inode=?', (inodeid))
+        self.db.execute('DELETE FROM symlink_targets WHERE inode=?', (inodeid))
 
     def close(self):
         seq_no = get_seq_no(self.backend)
