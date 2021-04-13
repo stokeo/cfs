@@ -469,8 +469,8 @@ class SqliteMetaBackend(object):
 
     def extstat(self):
         entries = self.db.get_val("SELECT COUNT(rowid) FROM contents")
-        blocks = self.db.get_val("SELECT COUNT(id) FROM objects")
-        inodes = self.db.get_val("SELECT COUNT(id) FROM inodes")
+        blocks = self.blocks_count()
+        inodes = self.inodes_count()
         fs_size = self.db.get_val('SELECT SUM(size) FROM inodes') or 0
         dedup_size = self.db.get_val('SELECT SUM(size) FROM blocks') or 0
 
@@ -480,6 +480,22 @@ class SqliteMetaBackend(object):
 
         return (entries, blocks, inodes, fs_size, dedup_size, compr_size,
                 self.db.get_size())
+
+    def create_inode(self, kw):
+        ATTRIBUTES = ('mode', 'refcount', 'uid', 'gid', 'size', 'locked',
+                      'rdev', 'atime_ns', 'mtime_ns', 'ctime_ns', 'id')
+
+        bindings = tuple(kw[x] for x in ATTRIBUTES if x in kw)
+        columns = ', '.join(x for x in ATTRIBUTES if x in kw)
+        values = ', '.join('?' * len(kw))
+
+        return self.db.rowid(
+            'INSERT INTO inodes (%s) VALUES(%s)' % (columns, values),
+            bindings)
+
+    def get_inode(self, inodeid):
+        return self.db.get_row(
+            "SELECT * FROM inodes WHERE id=? " (inodeid,))
 
     def delete_inode(self, inodeid):
         self.db.execute(
@@ -494,6 +510,14 @@ class SqliteMetaBackend(object):
         self.db.execute('DELETE FROM ext_attributes WHERE inode=?', (inodeid,))
         self.db.execute('DELETE FROM symlink_targets WHERE inode=?',
                         (inodeid,))
+
+    def update_inode(self, inode, update_attrs):
+        update_str = ', '.join('%s=?' % x for x in update_attrs)
+        self.db.execute("UPDATE inodes SET %s WHERE id=?" % update_str,
+                        [getattr(inode, x) for x in update_attrs] + [inode.id])
+
+    def cache_delete_inode(self, inodeid):
+        self.db.execute('DELETE FROM inodes WHERE id=?', (inodeid,))
 
     def close(self):
         seq_no = get_seq_no(self.backend)
