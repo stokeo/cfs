@@ -216,13 +216,15 @@ class SqliteMetaBackend(object):
 
         # Check for unclean shutdown
         if param['seq_no'] < seq_no:
-            raise QuietError('Backend reports that fs is still mounted elsewhere, aborting.',
-                             exitcode=31)
+            raise QuietError(
+                'Backend reports that fs is still mounted elsewhere, aborting.',
+                exitcode=31)
 
         # Check revision
         if param['revision'] < CURRENT_FS_REV:
-            raise QuietError('File system revision too old, please run `s3qladm upgrade` first.',
-                             exitcode=32)
+            raise QuietError(
+                'File system revision too old, please run `s3qladm upgrade` first.',
+                exitcode=32)
         elif param['revision'] > CURRENT_FS_REV:
             raise QuietError('File system revision too new, please update your '
                              'S3QL installation.', exitcode=33)
@@ -311,10 +313,10 @@ class SqliteMetaBackend(object):
             "SELECT parent_inode FROM contents WHERE inode=?",
             (inodeid,))
 
-    def lookup_dirent_inode(self, dir_inode, name):
+    def get_dirent_inode(self, parent_inode, name):
         return self.db.get_val(
             "SELECT inode FROM contents_v WHERE name=? AND parent_inode=?",
-            (name, dir_inode))
+            (name, parent_inode))
 
     def readlink(self, inodeid):
         return self.db.get_val(
@@ -339,9 +341,10 @@ class SqliteMetaBackend(object):
     def setxattr(self, inodeid, name, value):
         return self.db.execute(
             'INSERT OR REPLACE INTO ext_attributes (inode, name_id, value) '
-            'VALUES(?, ?, ?)', (inodeid, name, value))
+            'VALUES(?, ?, ?)', (inodeid, self._add_name(name), value))
 
-    def removexattr(self, inodeid, name_id):
+    def removexattr(self, inodeid, name):
+        name_id = self._del_name(name)
         return self.db.execute(
             'DELETE FROM ext_attributes WHERE inode=? AND name_id=?',
             (inodeid, name_id))
@@ -349,7 +352,7 @@ class SqliteMetaBackend(object):
     def link(self, name, inodeid, parent_inode_id):
         self.db.execute(
             "INSERT INTO contents (name_id, inode, parent_inode) VALUES(?,?,?)",
-            (self.add_name(name), inodeid, parent_inode_id))
+            (self._add_name(name), inodeid, parent_inode_id))
 
     def symlink(self, inodeid, target):
         self.db.execute('INSERT INTO symlink_targets (inode, target) VALUES(?,?)',
@@ -403,24 +406,12 @@ class SqliteMetaBackend(object):
                         (inodeid, tmpid))
 
     def delete_dirent(self, name, parent_inode):
+        name_id = self._del_name(name)
         self.db.execute(
             "DELETE FROM contents WHERE name_id=? AND parent_inode=?",
-            (name, parent_inode))
+            (name_id, parent_inode))
 
-    def delete_inode(self, inodeid):
-        self.db.execute(
-            'UPDATE names SET refcount = refcount - 1 WHERE '
-            'id IN (SELECT name_id FROM ext_attributes WHERE inode=?)',
-            (inodeid,))
-        self.db.execute(
-            'DELETE FROM names WHERE refcount=0 AND '
-            'id IN (SELECT name_id FROM ext_attributes WHERE inode=?)',
-            (inodeid,))
-        self.db.execute('DELETE FROM ext_attributes WHERE inode=?', (inodeid,))
-        self.db.execute('DELETE FROM symlink_targets WHERE inode=?',
-                        (inodeid,))
-
-    def add_name(self, name):
+    def _add_name(self, name):
         '''Get id for *name* and increase refcount
 
         Name is inserted in table if it does not yet exist.
@@ -436,7 +427,7 @@ class SqliteMetaBackend(object):
                             (name_id,))
         return name_id
 
-    def del_name(self, name):
+    def _del_name(self, name):
         '''Decrease refcount for *name*
 
         Name is removed from table if refcount drops to zero. Returns the
@@ -454,8 +445,8 @@ class SqliteMetaBackend(object):
         return name_id
 
     def rename(self, id_p_old, name_old, id_p_new, name_new):
-        name_id_new = self.add_name(name_new)
-        name_id_old = self.del_name(name_old)
+        name_id_new = self._add_name(name_new)
+        name_id_old = self._del_name(name_old)
 
         self.db.execute(
             "UPDATE contents SET name_id=?, parent_inode=? WHERE name_id=? "
@@ -472,18 +463,9 @@ class SqliteMetaBackend(object):
             (id_old, name_id_new, id_p_new))
 
         # Delete old name
-        name_id_old = self.del_name(name_old)
+        name_id_old = self._del_name(name_old)
         self.db.execute('DELETE FROM contents WHERE name_id=? AND parent_inode=?',
                         (name_id_old, id_p_old))
-
-    def replace_delete_inode(self, inodeid):
-        self.db.execute('UPDATE names SET refcount = refcount - 1 WHERE '
-                        'id IN (SELECT name_id FROM ext_attributes WHERE inode=?)',
-                        (inodeid,))
-        self.db.execute('DELETE FROM names WHERE refcount=0')
-        self.db.execute('DELETE FROM ext_attributes WHERE inode=?', (inodeid,))
-        self.db.execute('DELETE FROM symlink_targets WHERE inode=?',
-                        (inodeid,))
 
     def extstat(self):
         entries = self.db.get_val("SELECT COUNT(rowid) FROM contents")
@@ -499,24 +481,19 @@ class SqliteMetaBackend(object):
         return (entries, blocks, inodes, fs_size, dedup_size, compr_size,
                 self.db.get_size())
 
-    def create_inode(self, name, parent_inode):
-        return self.db.get_val(
-            "SELECT inode FROM contents_v WHERE name=? AND parent_inode=?",
-            (name, parent_inode))
-
-    def forget(self, inodeid):
-        # Since the inode is not open, it's not possible that new blocks
-        # get created at this point and we can safely delete the inode
+    def delete_inode(self, inodeid):
         self.db.execute(
             'UPDATE names SET refcount = refcount - 1 WHERE '
             'id IN (SELECT name_id FROM ext_attributes WHERE inode=?)',
             (inodeid,))
-        self.db.execute(
-            'DELETE FROM names WHERE refcount=0 AND '
-            'id IN (SELECT name_id FROM ext_attributes WHERE inode=?)',
-            (inodeid,))
-        self.db.execute('DELETE FROM ext_attributes WHERE inode=?', (inodeid))
-        self.db.execute('DELETE FROM symlink_targets WHERE inode=?', (inodeid))
+        # self.db.execute(
+        #     'DELETE FROM names WHERE refcount=0 AND '
+        #     'id IN (SELECT name_id FROM ext_attributes WHERE inode=?)',
+        #     (inodeid,))
+        self.db.execute('DELETE FROM names WHERE refcount=0')
+        self.db.execute('DELETE FROM ext_attributes WHERE inode=?', (inodeid,))
+        self.db.execute('DELETE FROM symlink_targets WHERE inode=?',
+                        (inodeid,))
 
     def close(self):
         seq_no = get_seq_no(self.backend)

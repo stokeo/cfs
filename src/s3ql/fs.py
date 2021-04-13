@@ -156,7 +156,7 @@ class Operations(pyfuse3.Operations):
 
         else:
             try:
-                id_ = self.db.lookup_dirent_inode(id_p, name)
+                id_ = self.db.get_dirent_inode(id_p, name)
             except NoSuchRowError:
                 raise FUSEError(errno.ENOENT)
             inode = self.inodes[id_]
@@ -317,7 +317,7 @@ class Operations(pyfuse3.Operations):
             if len(value) > deltadump.MAX_BLOB_SIZE:
                 raise FUSEError(errno.EINVAL)
 
-            self.db.setxattr(id_, self.db.add_name(name), value)
+            self.db.setxattr(id_, name, value)
             self.inodes[id_].ctime_ns = time_ns()
 
     async def removexattr(self, id_, name, ctx):
@@ -327,11 +327,10 @@ class Operations(pyfuse3.Operations):
             raise FUSEError(errno.EPERM)
 
         try:
-            name_id = self.db.del_name(name)
+            changes = self.db.removexattr(id_, name)
         except NoSuchRowError:
             raise FUSEError(pyfuse3.ENOATTR)
 
-        changes = self.db.removexattr(id_, name_id)
         if changes == 0:
             raise FUSEError(pyfuse3.ENOATTR)
 
@@ -557,8 +556,7 @@ class Operations(pyfuse3.Operations):
         if self.inodes[id_p].locked and not force:
             raise FUSEError(errno.EPERM)
 
-        name_id = self.db.del_name(name)
-        self.db.delete_dirent(name_id, id_p)
+        self.db.delete_dirent(name, id_p)
 
         inode = self.inodes[id_]
         inode.refcount -= 1
@@ -663,7 +661,7 @@ class Operations(pyfuse3.Operations):
                               int(math.ceil(inode_new.size / self.max_obj_size)))
             # Since the inode is not open, it's not possible that new blocks
             # get created at this point and we can safely delete the inode
-            self.db.replace_delete_inode(id_new)
+            self.db.delete_inode(id_new)
             del self.inodes[id_new]
 
     async def link(self, id_, new_id_p, new_name, ctx):
@@ -871,7 +869,7 @@ class Operations(pyfuse3.Operations):
             raise FUSEError(errno.EPERM)
 
         try:
-            id_ = self.db.create_inode(name, id_p)
+            id_ = self.db.get_dirent_inode(name, id_p)
         except NoSuchRowError:
             inode = self._create(id_p, name, mode, ctx)
         else:
@@ -1055,7 +1053,7 @@ class Operations(pyfuse3.Operations):
                         id_, 0, inode.size // self.max_obj_size + 1)
                     # Since the inode is not open, it's not possible that new blocks
                     # get created at this point and we can safely delete the inode
-                    self.db.forget(id_)
+                    self.db.delete_inode(id_)
                     del self.inodes[id_]
 
     async def fsyncdir(self, fh, datasync):

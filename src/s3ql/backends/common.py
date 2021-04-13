@@ -6,7 +6,7 @@ Copyright © 2008 Nikolaus Rath <Nikolaus@rath.org>
 This work can be distributed under the terms of the GNU GPLv3.
 '''
 
-from ..logging import logging, QuietError, LOG_ONCE # Ensure use of custom logger class
+from ..logging import logging, QuietError, LOG_ONCE  # Ensure use of custom logger class
 from abc import abstractmethod, ABCMeta
 from functools import wraps
 import time
@@ -22,6 +22,7 @@ import re
 import threading
 
 log = logging.getLogger(__name__)
+
 
 class RateTracker:
     '''

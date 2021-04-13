@@ -7,23 +7,23 @@ This work can be distributed under the terms of the GNU GPLv3.
 '''
 
 from .logging import logging, setup_logging, QuietError
-from . import CURRENT_FS_REV, CTRL_INODE, ROOT_INODE
+from . import CURRENT_FS_REV
 from .backends.comprenc import ComprencBackend
 from .backends import s3
-from .common import (get_backend, split_by_n, freeze_basic_mapping, time_ns)
+from .common import (get_backend, split_by_n, freeze_basic_mapping)
 from .database import Connection
-from .metadata import dump_and_upload_metadata, create_tables
+from .metadata import dump_and_upload_metadata, create_tables, init_tables
 from .parse_args import ArgumentParser
 from getpass import getpass
 from base64 import b64encode
 import os
 import shutil
-import stat
 import sys
 import time
 import atexit
 
 log = logging.getLogger(__name__)
+
 
 def parse_args(args):
 
@@ -39,42 +39,18 @@ def parse_args(args):
     parser.add_storage_url()
 
     parser.add_argument("-L", default='', help="Filesystem label",
-                      dest="label", metavar='<name>',)
+                        dest="label", metavar='<name>',)
     parser.add_argument("--max-obj-size", type=int, default=10240, metavar='<size>',
-                      help="Maximum size of storage objects in KiB. Files bigger than this "
+                        help="Maximum size of storage objects in KiB. Files bigger than this "
                            "will be spread over multiple objects in the storage backend. "
                            "Default: %(default)d KiB.")
     parser.add_argument("--plain", action="store_true", default=False,
-                      help="Create unencrypted file system.")
+                        help="Create unencrypted file system.")
 
     options = parser.parse_args(args)
 
     return options
 
-def init_tables(conn):
-    # Insert root directory
-    now_ns = time_ns()
-    conn.execute("INSERT INTO inodes (id,mode,uid,gid,mtime_ns,atime_ns,ctime_ns,refcount) "
-                 "VALUES (?,?,?,?,?,?,?,?)",
-                   (ROOT_INODE, stat.S_IFDIR | stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR
-                   | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH,
-                    os.getuid(), os.getgid(), now_ns, now_ns, now_ns, 1))
-
-    # Insert control inode, the actual values don't matter that much
-    conn.execute("INSERT INTO inodes (id,mode,uid,gid,mtime_ns,atime_ns,ctime_ns,refcount) "
-                 "VALUES (?,?,?,?,?,?,?,?)",
-                 (CTRL_INODE, stat.S_IFREG | stat.S_IRUSR | stat.S_IWUSR,
-                  0, 0, now_ns, now_ns, now_ns, 42))
-
-    # Insert lost+found directory
-    inode = conn.rowid("INSERT INTO inodes (mode,uid,gid,mtime_ns,atime_ns,ctime_ns,refcount) "
-                       "VALUES (?,?,?,?,?,?,?)",
-                       (stat.S_IFDIR | stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR,
-                        os.getuid(), os.getgid(), now_ns, now_ns, now_ns, 1))
-    name_id = conn.rowid('INSERT INTO names (name, refcount) VALUES(?,?)',
-                         (b'lost+found', 1))
-    conn.execute("INSERT INTO contents (name_id, inode, parent_inode) VALUES(?,?,?)",
-                 (name_id, inode, ROOT_INODE))
 
 def main(args=None):
 
@@ -170,6 +146,7 @@ def main(args=None):
               ' '.join(split_by_n(b64encode(data_pw).decode(), 4)),
               '---END MASTER KEY---',
               sep='\n')
+
 
 if __name__ == '__main__':
     main(sys.argv[1:])

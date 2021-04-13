@@ -8,8 +8,8 @@ This work can be distributed under the terms of the GNU GPLv3.
 
 from .logging import logging  # Ensure use of custom logger class
 from .database import Connection
-from . import BUFSIZE
-from .common import pretty_print_size
+from . import BUFSIZE, CTRL_INODE, ROOT_INODE
+from .common import pretty_print_size, time_ns
 from .deltadump import INTEGER, BLOB, dump_table, load_table
 from .backends.common import NoSuchObject, CorruptedObjectError
 import os
@@ -139,6 +139,7 @@ def cycle_metadata(backend, keep=10):
     if cycle_fn == backend.copy:
         backend.delete('s3ql_metadata_new')
 
+
 def dump_metadata(db, fh):
     '''Dump metadata into fh
 
@@ -262,6 +263,36 @@ def create_tables(conn):
     SELECT * FROM ext_attributes JOIN names ON names.id = name_id
     """)
 
+
+def init_tables(conn):
+    # Insert root directory
+    now_ns = time_ns()
+    conn.execute(
+        "INSERT INTO inodes (id,mode,uid,gid,mtime_ns,atime_ns,ctime_ns,refcount) "
+        "VALUES (?,?,?,?,?,?,?,?)",
+        (ROOT_INODE, stat.S_IFDIR | stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR
+         | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH,
+         os.getuid(), os.getgid(), now_ns, now_ns, now_ns, 1))
+
+    # Insert control inode, the actual values don't matter that much
+    conn.execute("INSERT INTO inodes (id,mode,uid,gid,mtime_ns,atime_ns,ctime_ns,refcount) "
+                 "VALUES (?,?,?,?,?,?,?,?)",
+                 (CTRL_INODE, stat.S_IFREG | stat.S_IRUSR | stat.S_IWUSR,
+                  0, 0, now_ns, now_ns, now_ns, 42))
+
+    # Insert lost+found directory
+    inode = conn.rowid(
+        "INSERT INTO inodes (mode,uid,gid,mtime_ns,atime_ns,ctime_ns,refcount) "
+        "VALUES (?,?,?,?,?,?,?)",
+        (stat.S_IFDIR | stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR,
+         os.getuid(), os.getgid(), now_ns, now_ns, now_ns, 1))
+    name_id = conn.rowid('INSERT INTO names (name, refcount) VALUES(?,?)',
+                         (b'lost+found', 1))
+    conn.execute(
+        "INSERT INTO contents (name_id, inode, parent_inode) VALUES(?,?,?)",
+        (name_id, inode, ROOT_INODE))
+
+
 def stream_write_bz2(ifh, ofh):
     '''Compress *ifh* into *ofh* using bz2 compression'''
 
@@ -276,6 +307,7 @@ def stream_write_bz2(ifh, ofh):
     buf = compr.flush()
     if buf:
         ofh.write(buf)
+
 
 def stream_read_bz2(ifh, ofh):
     '''Uncompress bz2 compressed *ifh* into *ofh*'''
@@ -292,6 +324,7 @@ def stream_read_bz2(ifh, ofh):
     if decompressor.unused_data or ifh.read(1) != b'':
         raise CorruptedObjectError('Data after end of bz2 stream')
 
+
 def download_metadata(backend, db_file, name='s3ql_metadata'):
     with tempfile.TemporaryFile() as tmpfh:
         def do_read(fh):
@@ -306,11 +339,13 @@ def download_metadata(backend, db_file, name='s3ql_metadata'):
         tmpfh.seek(0)
         return restore_metadata(tmpfh, db_file)
 
+
 def dump_and_upload_metadata(backend, db, param):
     with tempfile.TemporaryFile() as fh:
         log.info('Dumping metadata...')
         dump_metadata(db, fh)
         upload_metadata(backend, fh, param)
+
 
 def upload_metadata(backend, fh, param):
     log.info("Compressing and uploading metadata...")

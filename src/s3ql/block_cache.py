@@ -38,6 +38,7 @@ QuitSentinel = object()
 # be flushed
 FlushSentinel = object()
 
+
 class NoWorkerThreads(Exception):
     '''
     Raised when trying to enqueue an object, but there
@@ -45,6 +46,7 @@ class NoWorkerThreads(Exception):
     '''
 
     pass
+
 
 class CacheEntry(object):
     """An element in the block cache
@@ -147,6 +149,7 @@ class CacheDict(OrderedDict):
     def is_full(self):
         return (self.size > self.max_size
                 or len(self) > self.max_entries)
+
 
 class BlockCache(object):
     """Provides access to file blocks
@@ -301,7 +304,6 @@ class BlockCache(object):
 
         log.debug('cleanup done.')
 
-
     def _upload_loop(self):
         '''Process upload queue.
 
@@ -319,7 +321,6 @@ class BlockCache(object):
             log.debug('got work')
 
             self._do_upload(*tmp)
-
 
     def _do_upload(self, el, obj_id):
         '''Upload object.
@@ -389,7 +390,6 @@ class BlockCache(object):
         finally:
             self.in_transit.remove(el)
             trio.from_thread.run(with_event_loop, sys.exc_info(), trio_token=self.trio_token)
-
 
     async def wait(self):
         '''Wait until an object has been uploaded
@@ -659,7 +659,7 @@ class BlockCache(object):
     async def get(self, inode, blockno):
         """Get file handle for block `blockno` of `inode`."""
 
-        #log.debug('started with %d, %d', inode, blockno)
+        # log.debug('started with %d, %d', inode, blockno)
 
         if self.cache.is_full():
             await self.expire()
@@ -677,7 +677,7 @@ class BlockCache(object):
         finally:
             await self.mlock.release(inode, blockno)
 
-        #log.debug('finished')
+        # log.debug('finished')
 
     async def _get_entry(self, inode, blockno):
         '''Get cache entry for `blockno` of `inode`
@@ -741,7 +741,7 @@ class BlockCache(object):
 
         # In Cache
         else:
-            #log.debug('in cache')
+            # log.debug('in cache')
             self.cache.move_to_end((inode, blockno), last=True) # move to head
 
         return el
