@@ -10,7 +10,7 @@ from . import BUFSIZE
 from .database import NoSuchRowError
 from .backends.common import NoSuchObject
 from .multi_lock import MultiLock
-from .logging import logging # Ensure use of custom logger class
+from .logging import logging  # Ensure use of custom logger class
 from collections import OrderedDict
 from queue import Queue, Empty as QueueEmpty, Full as QueueFull
 from argparse import Namespace
@@ -340,7 +340,7 @@ class BlockCache(object):
         success = False
         async def with_event_loop(exc_info):
             if success:
-                self.db.execute('UPDATE objects SET size=? WHERE id=?', (obj_size, obj_id))
+                self.db.update_object_size(obj_size, obj_id)
                 el.dirty = False
             else:
                 exc = exc_info[1]
@@ -366,7 +366,7 @@ class BlockCache(object):
                 # assigned to a new block, so the inode_blocks entries will
                 # refer to incorrect data.
                 #
-                self.db.execute('UPDATE blocks SET hash=NULL WHERE obj_id=?', (obj_id,))
+                self.db.nullify_block_hash(obj_id)
 
             await self.mlock.release(obj_id)
             await self.mlock.release(el.inode, el.blockno)
@@ -461,30 +461,23 @@ class BlockCache(object):
 
         obj_lock_taken = False
         try:
-            try:
-                old_block_id = self.db.get_val('SELECT block_id FROM inode_blocks '
-                                               'WHERE inode=? AND blockno=?',
-                                               (el.inode, el.blockno))
-            except NoSuchRowError:
-                old_block_id = None
+            old_block_id = self.db.get_block_id(el.inode, el.blockno)
 
             try:
-                block_id = self.db.get_val('SELECT id FROM blocks WHERE hash=?', (hash_,))
+                block_id = self.db.block_id_by_hash(hash_)
 
             # No block with same hash
             except NoSuchRowError:
-                obj_id = self.db.rowid('INSERT INTO objects (refcount, size) VALUES(1, -1)')
+                obj_id = self.db.create_object()
                 log.debug('created new object %d', obj_id)
-                block_id = self.db.rowid('INSERT INTO blocks (refcount, obj_id, hash, size) '
-                                         'VALUES(?,?,?,?)', (1, obj_id, hash_, el.size))
+                block_id = self.db.create_block(obj_id, hash_, el.size)
                 log.debug('created new block %d', block_id)
                 log.debug('adding to upload queue')
 
                 # Note: we must finish all db transactions before adding to
                 # in_transit, otherwise commit() may return before all blocks
                 # are available in db.
-                self.db.execute('INSERT OR REPLACE INTO inode_blocks (block_id, inode, blockno) '
-                                'VALUES(?,?,?)', (block_id, el.inode, el.blockno))
+                self.db.inode_add_block(block_id, el.inode, el.blockno)
 
                 await self.mlock.acquire(obj_id)
                 obj_lock_taken = True
@@ -494,10 +487,8 @@ class BlockCache(object):
             else:
                 if old_block_id != block_id:
                     log.debug('(re)linking to %d', block_id)
-                    self.db.execute('UPDATE blocks SET refcount=refcount+1 WHERE id=?',
-                                    (block_id,))
-                    self.db.execute('INSERT OR REPLACE INTO inode_blocks (block_id, inode, blockno) '
-                                    'VALUES(?,?,?)', (block_id, el.inode, el.blockno))
+                    self.db.increment_block_ref(block_id)
+                    self.db.inode_add_block(block_id, el.inode, el.blockno)
 
                 el.dirty = False
                 self.in_transit.remove(el)
@@ -520,7 +511,6 @@ class BlockCache(object):
             log.debug('no old block')
 
         return obj_lock_taken
-
 
     async def _queue_upload(self, obj):
         '''Put *obj* into upload queue'''
@@ -558,31 +548,10 @@ class BlockCache(object):
         If reference counter drops to zero, remove block and propagate to
         objects table (possibly removing the referenced object as well).
         '''
+        obj_id, size = self.db.deref_block(block_id)
 
-        refcount = self.db.get_val('SELECT refcount FROM blocks WHERE id=?', (block_id,))
-        if refcount > 1:
-            log.debug('decreased refcount for block: %d', block_id)
-            self.db.execute('UPDATE blocks SET refcount=refcount-1 WHERE id=?', (block_id,))
+        if obj_id is None:
             return
-
-        log.debug('removing block %d', block_id)
-        obj_id = self.db.get_val('SELECT obj_id FROM blocks WHERE id=?', (block_id,))
-        self.db.execute('DELETE FROM blocks WHERE id=?', (block_id,))
-        (refcount, size) = self.db.get_row('SELECT refcount, size FROM objects WHERE id=?',
-                                           (obj_id,))
-        if refcount > 1:
-            log.debug('decreased refcount for obj: %d', obj_id)
-            self.db.execute('UPDATE objects SET refcount=refcount-1 WHERE id=?',
-                            (obj_id,))
-            return
-
-        log.debug('removing object %d', obj_id)
-        self.db.execute('DELETE FROM objects WHERE id=?', (obj_id,))
-
-        # Taking the lock ensures that the object is no longer in
-        # transit itself. We can release it immediately after, because
-        # the object is no longer in the database.
-        log.debug('adding %d to removal queue', obj_id)
 
         await self.mlock.acquire(obj_id)
         await self.mlock.release(obj_id)
@@ -692,19 +661,17 @@ class BlockCache(object):
         # Not in cache
         except KeyError:
             filename = os.path.join(self.path, '%d-%d' % (inode, blockno))
-            try:
-                block_id = self.db.get_val('SELECT block_id FROM inode_blocks '
-                                           'WHERE inode=? AND blockno=?', (inode, blockno))
 
+            block_id = self.db.get_block_id(inode, blockno)
             # No corresponding object
-            except NoSuchRowError:
+            if block_id is None:
                 log.debug('creating new block')
                 el = CacheEntry(inode, blockno, filename)
                 self.cache[(inode, blockno)] = el
                 return el
 
             # Need to download corresponding object
-            obj_id = self.db.get_val('SELECT obj_id FROM blocks WHERE id=?', (block_id,))
+            obj_id = self.db.get_objid(block_id)
             log.debug('downloading object %d..', obj_id)
             tmpfh = open(filename + '.tmp', 'wb')
             try:
@@ -796,7 +763,6 @@ class BlockCache(object):
 
         log.debug('finished')
 
-
     async def remove(self, inode, start_no, end_no=None):
         """Remove blocks for `inode`
 
@@ -829,16 +795,13 @@ class BlockCache(object):
                         log.debug('removing from cache')
                         self.cache.remove((inode, blockno))
 
-                    try:
-                        block_id = self.db.get_val('SELECT block_id FROM inode_blocks '
-                                                   'WHERE inode=? AND blockno=?', (inode, blockno))
-                    except NoSuchRowError:
+                    block_id = self.db.get_block_id(inode, blockno)
+                    if block_id is None:
                         log.debug('block not in db')
                         continue
 
                     # Detach inode from block
-                    self.db.execute('DELETE FROM inode_blocks WHERE inode=? AND blockno=?',
-                                    (inode, blockno))
+                    self.db.inode_del_block(inode, blockno)
 
                 finally:
                     await self.mlock.release(inode, blockno)

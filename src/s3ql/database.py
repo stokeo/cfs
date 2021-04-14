@@ -519,6 +519,78 @@ class SqliteMetaBackend(object):
     def cache_delete_inode(self, inodeid):
         self.db.execute('DELETE FROM inodes WHERE id=?', (inodeid,))
 
+    def update_object_size(self, obj_id, obj_size):
+        self.db.execute('UPDATE objects SET size=? WHERE id=?',
+                        (obj_size, obj_id))
+
+    def nullify_block_hash(self, obj_id):
+        self.db.execute('UPDATE blocks SET hash=NULL WHERE obj_id=?',
+                        (obj_id,))
+
+    def get_block_id(self, inodeid, blockno):
+        try:
+            return self.db.get_val('SELECT block_id FROM inode_blocks '
+                                   'WHERE inode=? AND blockno=?',
+                                   (inodeid, blockno))
+        except NoSuchRowError:
+            return None
+
+    def block_id_by_hash(self, hash_):
+        return self.db.get_val('SELECT id FROM blocks WHERE hash=?', (hash_,))
+
+    def create_object(self):
+        return self.db.rowid(
+            'INSERT INTO objects (refcount, size) VALUES(1, -1)')
+
+    def create_block(self, obj_id, hash_, size):
+        return self.db.rowid(
+            'INSERT INTO blocks (refcount, obj_id, hash, size) '
+            'VALUES(?,?,?,?)', (1, obj_id, hash_, size))
+
+    def increment_block_ref(self, blockid):
+        self.db.execute('UPDATE blocks SET refcount=refcount+1 WHERE id=?',
+                        (blockid,))
+
+    def inode_add_block(self, inodeid, blockid, blockno):
+        self.db.execute(
+            'INSERT OR REPLACE INTO inode_blocks (block_id, inode, blockno) '
+            'VALUES(?,?,?)', (blockid, inodeid, blockno))
+
+    def inode_del_block(self, inode, blockno):
+        self.db.execute('DELETE FROM inode_blocks WHERE inode=? AND blockno=?',
+                        (inode, blockno))
+
+    def get_objid(self, blockid):
+        return self.db.get_val('SELECT obj_id FROM blocks WHERE id=?',
+                               (blockid,))
+
+    def deref_block(self, block_id):
+        refcount = self.db.get_val('SELECT refcount FROM blocks WHERE id=?',
+                                   (block_id,))
+        if refcount > 1:
+            log.debug('decreased refcount for block: %d', block_id)
+            self.db.execute('UPDATE blocks SET refcount=refcount-1 WHERE id=?',
+                            (block_id,))
+            return None
+
+        log.debug('removing block %d', block_id)
+        obj_id = self.db.get_val('SELECT obj_id FROM blocks WHERE id=?',
+                                 (block_id,))
+        self.db.execute('DELETE FROM blocks WHERE id=?', (block_id,))
+        (refcount, size) = self.db.get_row(
+            'SELECT refcount, size FROM objects WHERE id=?',
+            (obj_id,))
+        if refcount > 1:
+            log.debug('decreased refcount for obj: %d', obj_id)
+            self.db.execute(
+                'UPDATE objects SET refcount=refcount-1 WHERE id=?',
+                (obj_id,))
+            return
+
+        log.debug('removing object %d', obj_id)
+        self.db.execute('DELETE FROM objects WHERE id=?', (obj_id,))
+        return obj_id, size
+
     def close(self):
         seq_no = get_seq_no(self.backend)
         if self._metadata_upload_task.db_mtime == os.stat(self.cachepath + '.db').st_mtime:

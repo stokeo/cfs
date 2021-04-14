@@ -69,6 +69,7 @@ def get_seq_no(backend):
 
     return seq_no
 
+
 def is_mounted(storage_url):
     '''Try to determine if *storage_url* is mounted
 
@@ -94,6 +95,7 @@ def is_mounted(storage_url):
                     '(/proc/mounts missing and mount call failed)')
 
     return False
+
 
 def inode_for_path(path, conn):
     """Return inode of directory entry at `path`

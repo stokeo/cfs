@@ -117,7 +117,7 @@ def main(args=None):
         prof = cProfile.Profile()
         prof.runcall(trio.run, main_async, options, stdout_log_handler)
         with tempfile.NamedTemporaryFile() as tmp, \
-            open('s3ql_profile.txt', 'w') as fh:
+                open('s3ql_profile.txt', 'w') as fh:
             prof.dump_stats(tmp.name)
             p = pstats.Stats(tmp.name, stream=fh)
             p.strip_dirs()
@@ -126,8 +126,8 @@ def main(args=None):
             p.sort_stats('time')
             p.print_stats(50)
     else:
-        #trio.run(main_async, options, stdout_log_handler,
-        #         instruments=[Tracer()])
+        # trio.run(main_async, options, stdout_log_handler,
+        #          instruments=[Tracer()])
         trio.run(main_async, options, stdout_log_handler)
 
 
