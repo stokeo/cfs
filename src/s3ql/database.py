@@ -16,7 +16,7 @@ Module Attributes:
 from .logging import logging, QuietError  # Ensure use of custom logger class
 from .common import get_seq_no
 from .metadata import (download_metadata, dump_metadata, upload_metadata,
-                       dump_and_upload_metadata)
+                       dump_and_upload_metadata, create_tables, init_tables)
 from . import CURRENT_FS_REV
 import apsw
 from ast import literal_eval
@@ -179,13 +179,36 @@ class Connection(object):
 
 
 class SqliteMetaBackend(object):
-    def __init__(self, backend=None, cachepath=None):
+    def __init__(self, backend=None, cachepath=None,
+                 mkfs=False, mkfsopts=None):
         self.backend = backend
         self.cachepath = cachepath
         self.db = None
         self.param = None
         self._metadata_upload_task = None
+
+        if mkfs:
+            self.mkfs()
+
         self.get_metadata(backend, cachepath)
+
+    def mkfs(self, options):
+        db = Connection(self.cachepath + '.db')
+        create_tables(db)
+        init_tables(db)
+
+        param = dict()
+        param['revision'] = CURRENT_FS_REV
+        param['seq_no'] = int(time.time())
+        param['label'] = options.label
+        param['max_obj_size'] = options.max_obj_size * 1024
+        param['needs_fsck'] = False
+        param['inode_gen'] = 0
+        param['last_fsck'] = time.time()
+        param['last-modified'] = time.time()
+
+        log.info('Dumping metadata...')
+        dump_and_upload_metadata(self.backend, db, param)
 
     def get_metadata(self, backend, cachepath):
         '''Retrieve metadata'''

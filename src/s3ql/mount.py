@@ -163,7 +163,6 @@ class Tracer(trio.abc.Instrument):
 
 
 async def main_async(options, stdout_log_handler):
-
     # Get paths
     cachepath = options.cachepath
 

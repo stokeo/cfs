@@ -7,19 +7,16 @@ This work can be distributed under the terms of the GNU GPLv3.
 '''
 
 from .logging import logging, setup_logging, QuietError
-from . import CURRENT_FS_REV
 from .backends.comprenc import ComprencBackend
 from .backends import s3
 from .common import (get_backend, split_by_n, freeze_basic_mapping)
-from .database import Connection
-from .metadata import dump_and_upload_metadata, create_tables, init_tables
+from .database import SqliteMetaBackend
 from .parse_args import ArgumentParser
 from getpass import getpass
 from base64 import b64encode
 import os
 import shutil
 import sys
-import time
 import atexit
 
 log = logging.getLogger(__name__)
@@ -116,22 +113,10 @@ def main(args=None):
         shutil.rmtree(cachepath + '-cache')
 
     log.info('Creating metadata tables...')
-    db = Connection(cachepath + '.db')
-    create_tables(db)
-    init_tables(db)
+    db = SqliteMetaBackend(backend=backend, cachepath=cachepath + '.db',
+                           mkfs=True, mkfsopts=options)
+    param = db.param
 
-    param = dict()
-    param['revision'] = CURRENT_FS_REV
-    param['seq_no'] = int(time.time())
-    param['label'] = options.label
-    param['max_obj_size'] = options.max_obj_size * 1024
-    param['needs_fsck'] = False
-    param['inode_gen'] = 0
-    param['last_fsck'] = time.time()
-    param['last-modified'] = time.time()
-
-    log.info('Dumping metadata...')
-    dump_and_upload_metadata(backend, db, param)
     backend.store('s3ql_seq_no_%d' % param['seq_no'], b'Empty')
     with open(cachepath + '.params', 'wb') as fh:
         fh.write(freeze_basic_mapping(param))
