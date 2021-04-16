@@ -13,7 +13,7 @@ from .block_cache import BlockCache
 from .common import (get_backend_factory,
                      is_mounted)
 from .daemonize import daemonize
-from .database import SqliteMetaBackend
+from .metadata import SqliteMetaBackend
 from .inode_cache import InodeCache
 from .parse_args import ArgumentParser
 from contextlib import AsyncExitStack

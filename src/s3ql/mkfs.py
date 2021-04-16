@@ -10,7 +10,7 @@ from .logging import logging, setup_logging, QuietError
 from .backends.comprenc import ComprencBackend
 from .backends import s3
 from .common import (get_backend, split_by_n, freeze_basic_mapping)
-from .database import SqliteMetaBackend
+from .metadata import SqliteMetaBackend
 from .parse_args import ArgumentParser
 from getpass import getpass
 from base64 import b64encode
