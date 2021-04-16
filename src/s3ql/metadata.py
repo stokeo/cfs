@@ -77,7 +77,7 @@ class SqliteMetaBackend(object):
         self.cachepath = cachepath
         self.db = None
         self.param = None
-        self._metadata_upload_task = None
+        self._metadata_upload_interval = None
 
         if mkfs:
             self.mkfs(mkfsopts)
@@ -181,7 +181,7 @@ class SqliteMetaBackend(object):
                              metadata_upload_interval):
         self._metadata_upload_interval = MetadataUploadTask(
             backend_pool, self.param, self.db, metadata_upload_interval)
-        return self._metadata_upload_task
+        return self._metadata_upload_interval
 
     def load_params(self):
         with open(self.cachepath + '.params', 'rb') as fh:
