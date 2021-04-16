@@ -80,9 +80,9 @@ class SqliteMetaBackend(object):
         self._metadata_upload_task = None
 
         if mkfs:
-            self.mkfs()
-
-        self.get_metadata(backend, cachepath)
+            self.mkfs(mkfsopts)
+        else:
+            self.get_metadata(backend, cachepath)
 
     def mkfs(self, options):
         db = Connection(self.cachepath + '.db')
@@ -98,6 +98,7 @@ class SqliteMetaBackend(object):
         param['inode_gen'] = 0
         param['last_fsck'] = time.time()
         param['last-modified'] = time.time()
+        self.param = param
 
         log.info('Dumping metadata...')
         dump_and_upload_metadata(self.backend, db, param)
@@ -160,10 +161,10 @@ class SqliteMetaBackend(object):
             if os.path.exists(cachepath + '-cache'):
                 shutil.rmtree(cachepath + '-cache')
 
-        self.save_params()
-
         self.param = param
         self.db = db
+
+        self.save_params()
 
     def mark_metadata_dirty(self):
         '''Mark metadata as dirty and increase sequence number'''
