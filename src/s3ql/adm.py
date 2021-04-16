@@ -543,5 +543,6 @@ def checksum_basic_mapping_old(metadata, key=None):
 
     return chk.digest()
 
+
 if __name__ == '__main__':
     main(sys.argv[1:])
