@@ -86,6 +86,7 @@ class SqliteMetaBackend(object):
 
     def mkfs(self, options):
         db = Connection(self.cachepath + '.db')
+        self.db = db
         create_tables(db)
         init_tables(db)
 
@@ -101,7 +102,7 @@ class SqliteMetaBackend(object):
         self.param = param
 
         log.info('Dumping metadata...')
-        dump_and_upload_metadata(self.backend, db, param)
+        self.dump_and_upload_metadata()
 
     def get_metadata(self, backend, cachepath):
         '''Retrieve metadata'''

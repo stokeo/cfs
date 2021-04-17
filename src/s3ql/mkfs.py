@@ -113,7 +113,7 @@ def main(args=None):
         shutil.rmtree(cachepath + '-cache')
 
     log.info('Creating metadata tables...')
-    db = SqliteMetaBackend(backend=backend, cachepath=cachepath + '.db',
+    db = SqliteMetaBackend(backend=backend, cachepath=cachepath,
                            mkfs=True, mkfsopts=options)
     param = db.param
 
