@@ -411,7 +411,7 @@ class SqliteMetaBackend(object):
 
     def get_inode(self, inodeid):
         return self.db.get_row(
-            "SELECT * FROM inodes WHERE id=? " (inodeid,))
+            "SELECT * FROM inodes WHERE id=? ", (inodeid,))
 
     def delete_inode(self, inodeid):
         self.db.execute(
