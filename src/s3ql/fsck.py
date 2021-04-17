@@ -11,10 +11,11 @@ from . import CURRENT_FS_REV, BUFSIZE, CTRL_INODE, ROOT_INODE
 from .backends.common import NoSuchObject
 from .backends.comprenc import ComprencBackend
 from .backends.local import Backend as LocalBackend
-from .common import (inode_for_path, sha256_fh, get_path, get_seq_no, is_mounted,
-                     get_backend, load_params, save_params, time_ns)
+from .common import (inode_for_path, sha256_fh, get_path, get_seq_no,
+                     is_mounted, get_backend, time_ns)
 from .database import NoSuchRowError, Connection
-from .metadata import dump_and_upload_metadata, download_metadata
+from .metadata import (dump_and_upload_metadata, download_metadata,
+                       load_params, save_params)
 from .parse_args import ArgumentParser
 from os.path import basename
 import apsw
