@@ -9,7 +9,7 @@ This work can be distributed under the terms of the GNU GPLv3.
 from .logging import logging
 from . import deltadump, CTRL_NAME, CTRL_INODE
 from .backends.common import NoSuchObject, CorruptedObjectError
-from .common import get_path, parse_literal, time_ns
+from .common import parse_literal, time_ns
 from .database import NoSuchRowError
 from io import BytesIO
 import collections
@@ -479,7 +479,7 @@ class Operations(pyfuse3.Operations):
                         if inode.refcount != 1:
                             id_cache[id_] = id_new
 
-                        processed += self.db.copy_tree_files(id_new, id_)
+                        processed += db.copy_tree_files(id_new, id_)
 
                         if db.is_directory(id_):
                             queue.append((id_, id_new, -1))
@@ -487,7 +487,7 @@ class Operations(pyfuse3.Operations):
                         id_new = id_cache[id_]
                         self.inodes[id_new].refcount += 1
 
-                    self.db.copy_tree_dirs(name_id, id_new, target_id)
+                    db.copy_tree_dirs(name_id, id_new, target_id)
 
                     # Break every once in a while - note that we can't yield
                     # right here because there's an active DB query.
@@ -499,7 +499,7 @@ class Operations(pyfuse3.Operations):
             await trio.lowlevel.checkpoint()
 
         # Make replication visible
-        self.db.make_copy_visible(target_inode.id, tmp.id)
+        db.make_copy_visible(target_inode.id, tmp.id)
         del self.inodes[tmp.id]
         pyfuse3.invalidate_inode(target_inode.id)
 
@@ -550,7 +550,7 @@ class Operations(pyfuse3.Operations):
         # Check that there are no child entries
         if self.db.is_directory(id_):
             log.debug("Attempted to remove entry with children: %s",
-                      get_path(id_p, self.db, name))
+                      self.db.get_path(id_p, name))
             raise FUSEError(errno.ENOTEMPTY)
 
         if self.inodes[id_p].locked and not force:
@@ -603,8 +603,8 @@ class Operations(pyfuse3.Operations):
         log.debug('started with %d, %r, %d, %r', id_p_old, name_old, id_p_new, name_new)
         if name_new == CTRL_NAME or name_old == CTRL_NAME:
             log.warning('Attempted to rename s3ql control file (%s -> %s)',
-                        get_path(id_p_old, self.db, name_old),
-                        get_path(id_p_new, self.db, name_new))
+                        self.db.get_path(id_p_old, name_old),
+                        self.db.get_path(id_p_new, name_new))
             raise FUSEError(errno.EACCES)
 
         if (self.failsafe or self.inodes[id_p_old].locked
@@ -638,7 +638,7 @@ class Operations(pyfuse3.Operations):
 
         if self.db.is_directory(id_new):
             log.info("Attempted to overwrite entry with children: %s",
-                     get_path(id_p_new, self.db, name_new))
+                     self.db.get_path(id_p_new, name_new))
             raise FUSEError(errno.EINVAL)
 
         # Replace target
@@ -669,7 +669,7 @@ class Operations(pyfuse3.Operations):
 
         if new_name == CTRL_NAME or id_ == CTRL_INODE:
             log.warning('Attempted to create s3ql control file at %s',
-                        get_path(new_id_p, self.db, new_name))
+                        self.db.get_path(new_id_p, new_name))
             raise FUSEError(errno.EACCES)
 
         now_ns = time_ns()
@@ -882,7 +882,7 @@ class Operations(pyfuse3.Operations):
     def _create(self, id_p, name, mode, ctx, rdev=0, size=0):
         if name == CTRL_NAME:
             log.warning('Attempted to create s3ql control file at %s',
-                        get_path(id_p, self.db, name))
+                        self.db.get_path(id_p, name))
             raise FUSEError(errno.EACCES)
 
         now_ns = time_ns()

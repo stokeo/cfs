@@ -77,7 +77,7 @@ class SqliteMetaBackend(object):
         self.cachepath = cachepath
         self.db = None
         self.param = None
-        self._metadata_upload_interval = None
+        self._metadata_upload_obj = None
 
         if mkfs:
             self.mkfs(mkfsopts)
@@ -180,9 +180,9 @@ class SqliteMetaBackend(object):
 
     def metadata_upload_task(self, backend_pool,
                              metadata_upload_interval):
-        self._metadata_upload_interval = MetadataUploadTask(
+        self._metadata_upload_obj = MetadataUploadTask(
             backend_pool, self.param, self.db, metadata_upload_interval)
-        return self._metadata_upload_interval
+        return self._metadata_upload_obj
 
     def load_params(self):
         with open(self.cachepath + '.params', 'rb') as fh:
@@ -234,6 +234,37 @@ class SqliteMetaBackend(object):
         return self.db.get_val(
             "SELECT inode FROM contents_v WHERE name=? AND parent_inode=?",
             (name, parent_inode))
+
+    def get_path(self, id_, name=None):
+        """Return a full path for inode `id_`.
+
+        If `name` is specified, it is appended at the very end of the
+        path (useful if looking up the path for file name with parent
+        inode).
+        """
+        if name is None:
+            path = list()
+        else:
+            if not isinstance(name, bytes):
+                raise TypeError('name must be of type bytes')
+            path = [name]
+
+        maxdepth = 255
+        while id_ != ROOT_INODE:
+            # This can be ambiguous if directories are hardlinked
+            (name2, id_) = self.db.get_row(
+                "SELECT name, parent_inode FROM contents_v "
+                "WHERE inode=? LIMIT 1", (id_,))
+            path.append(name2)
+            maxdepth -= 1
+            if maxdepth == 0:
+                raise RuntimeError(
+                    'Failed to resolve name "%s" at inode %d to path',
+                    name, id_)
+
+        path.append(b'')
+        path.reverse()
+        return b'/'.join(path)
 
     def readlink(self, inodeid):
         return self.db.get_val(
@@ -510,7 +541,8 @@ class SqliteMetaBackend(object):
 
     def close(self):
         seq_no = get_seq_no(self.backend)
-        if self._metadata_upload_task.db_mtime == os.stat(self.cachepath + '.db').st_mtime:
+        if self._metadata_upload_obj.db_mtime == os.stat(
+                self.cachepath + '.db').st_mtime:
             log.info('File system unchanged, not uploading metadata.')
             del self.backend['s3ql_seq_no_%d' % self.param['seq_no']]
             self.param['seq_no'] -= 1
@@ -522,8 +554,9 @@ class SqliteMetaBackend(object):
         else:
             log.error('Remote metadata is newer than local (%d vs %d), '
                       'refusing to overwrite!', seq_no, self.param['seq_no'])
-            log.error('The locally cached metadata will be *lost* the next time the file system '
-                      'is mounted or checked and has therefore been backed up.')
+            log.error('The locally cached metadata will be *lost* the next '
+                      'time the file system is mounted or checked and has '
+                      'therefore been backed up.')
             for name in (self.cachepath + '.params', self.cachepath + '.db'):
                 for i in range(4)[::-1]:
                     if os.path.exists(name + '.%d' % i):
