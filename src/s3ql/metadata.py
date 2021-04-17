@@ -911,3 +911,30 @@ def upload_metadata(backend, fh, param):
 
     log.info('Cycling metadata backups...')
     cycle_metadata(backend)
+
+
+def load_params(cachepath):
+    with open(cachepath + '.params', 'rb') as fh:
+        return thaw_basic_mapping(fh.read())
+
+
+def save_params(cachepath, param):
+    filename = cachepath + '.params'
+    tmpname = filename + '.tmp'
+    with open(tmpname, 'wb') as fh:
+        fh.write(freeze_basic_mapping(param))
+        # Fsync to make sure that the updated sequence number is committed to
+        # disk. Otherwise, a crash immediately after mount could result in both
+        # the local and remote metadata appearing to be out of date.
+        fh.flush()
+        os.fsync(fh.fileno())
+
+    # we need to flush the dirents too.
+    # stackoverflow.com/a/41362774
+    # stackoverflow.com/a/5809073
+    os.rename(tmpname, filename)
+    dirfd = os.open(os.path.dirname(filename), os.O_DIRECTORY)
+    try:
+        os.fsync(dirfd)
+    finally:
+        os.close(dirfd)

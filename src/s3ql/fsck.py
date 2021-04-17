@@ -35,7 +35,6 @@ S_IFMT = (stat.S_IFDIR | stat.S_IFREG | stat.S_IFSOCK | stat.S_IFBLK |
 
 
 class Fsck(object):
-
     def __init__(self, cachedir_, backend_, param, conn):
 
         self.cachedir = cachedir_
