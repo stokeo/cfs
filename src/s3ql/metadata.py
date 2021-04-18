@@ -68,6 +68,9 @@ DUMP_SPEC = [
                                           ('name_id', INTEGER),
                                           ('value', BLOB))),
 ]
+ATTRIBUTES = ('mode', 'refcount', 'uid', 'gid', 'size', 'locked',
+              'rdev', 'atime_ns', 'mtime_ns', 'ctime_ns', 'id')
+ATTRIBUTE_STR = ', '.join(ATTRIBUTES)
 
 
 class SqliteMetaBackend(object):
@@ -444,7 +447,8 @@ class SqliteMetaBackend(object):
 
     def get_inode(self, inodeid):
         return self.db.get_row(
-            "SELECT * FROM inodes WHERE id=? ", (inodeid,))
+            "SELECT {} FROM inodes WHERE id=? ".format(ATTRIBUTE_STR),
+            (inodeid,))
 
     def delete_inode(self, inodeid):
         self.db.execute(
