@@ -166,7 +166,6 @@ class Operations(pyfuse3.Operations):
 
     async def getattr(self, id_, ctx):
         log.debug('started with %d, %d', id_, CTRL_INODE)
-        log.debug('inode exists : %d', self.inodes.get(id_, -1))
         if id_ == CTRL_INODE:
             # Make sure the control file is only writable by the user
             # who mounted the file system (but don't mark inode as dirty)
