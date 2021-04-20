@@ -433,7 +433,7 @@ class SqliteMetaBackend(object):
                 self.db.get_size())
 
     def create_inode(self, kw):
-        columns_list = (x for x in ATTRIBUTES if x in kw)
+        columns_list = [x for x in ATTRIBUTES if x in kw]
         columns = ', '.join(columns_list)
         bindings = tuple(kw[x] for x in columns_list)
         values = ', '.join('?' * len(kw))
