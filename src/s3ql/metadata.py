@@ -551,7 +551,7 @@ class SqliteMetaBackend(object):
             self.save_params()
         elif seq_no == self.param['seq_no']:
             self.param['last-modified'] = time.time()
-            self.db.dump_and_upload_metadata()
+            self.dump_and_upload_metadata()
             self.save_params()
         else:
             log.error('Remote metadata is newer than local (%d vs %d), '
