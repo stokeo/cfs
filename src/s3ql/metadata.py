@@ -278,7 +278,7 @@ class SqliteMetaBackend(object):
         return self.db.query(
             "SELECT name_id, name, inode FROM contents_v "
             'WHERE parent_inode=? AND name_id > ? ORDER BY name_id',
-            (inodeid, off-3))
+            (inodeid, off))
 
     def getxattr(self, inodeid, name):
         return self.db.get_val(
