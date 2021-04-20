@@ -551,11 +551,11 @@ class SqliteMetaBackend(object):
             log.info('File system unchanged, not uploading metadata.')
             del self.backend['s3ql_seq_no_%d' % self.param['seq_no']]
             self.param['seq_no'] -= 1
-            self.db.save_params()
+            self.save_params()
         elif seq_no == self.param['seq_no']:
             self.param['last-modified'] = time.time()
             self.db.dump_and_upload_metadata()
-            self.db.save_params()
+            self.save_params()
         else:
             log.error('Remote metadata is newer than local (%d vs %d), '
                       'refusing to overwrite!', seq_no, self.param['seq_no'])
