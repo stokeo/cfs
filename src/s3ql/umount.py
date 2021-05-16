@@ -20,6 +20,7 @@ import time
 
 log = logging.getLogger(__name__)
 
+
 def parse_args(args):
     '''Parse command line
 
@@ -42,11 +43,12 @@ def parse_args(args):
                         help='Mount point to un-mount')
 
     parser.add_argument('--lazy', "-z", action="store_true", default=False,
-                      help="Lazy umount. Detaches the file system immediately, even if there "
-                      'are still open files. The data will be uploaded in the background '
-                      'once all open files have been closed.')
+                        help="Lazy umount. Detaches the file system immediately, even if there "
+                        'are still open files. The data will be uploaded in the background '
+                        'once all open files have been closed.')
 
     return parser.parse_args(args)
+
 
 class UmountError(Exception):
     """
@@ -63,13 +65,16 @@ class UmountError(Exception):
     def __str__(self):
         return self.message
 
+
 class UmountSubError(UmountError):
     message = 'Unmount subprocess failed.'
     exitcode = 2
 
+
 class MountInUseError(UmountError):
     message = 'In use.'
     exitcode = 1
+
 
 def lazy_umount(mountpoint):
     '''Invoke fusermount -u -z for mountpoint'''
@@ -82,6 +87,7 @@ def lazy_umount(mountpoint):
 
     if subprocess.call(umount_cmd) != 0:
         raise UmountSubError(mountpoint)
+
 
 def get_cmdline(pid):
     '''Return command line for *pid*
@@ -111,6 +117,7 @@ def get_cmdline(pid):
                         % pid)
 
     return None
+
 
 def blocking_umount(mountpoint):
     '''Invoke fusermount and wait for daemon to terminate.'''
@@ -173,6 +180,7 @@ def blocking_umount(mountpoint):
         if step < 1:
             step += 0.1
 
+
 def main(args=None):
     '''Umount S3QL file system'''
 
@@ -202,6 +210,7 @@ def main(args=None):
         sys.exit(err.exitcode)
 
     sys.exit(0)
+
 
 if __name__ == '__main__':
     main(sys.argv[1:])
