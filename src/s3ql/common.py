@@ -39,6 +39,7 @@ def path2bytes(s):
 def bytes2path(s):
     return s.decode(file_system_encoding, 'surrogateescape')
 
+
 def get_seq_no(backend):
     '''Get current metadata sequence number'''
 
@@ -67,7 +68,7 @@ def get_seq_no(backend):
         try:
             del backend['s3ql_seq_no_%d' % i]
         except NoSuchObject:
-            pass # Key list may not be up to date
+            pass  # Key list may not be up to date
 
     return seq_no
 
@@ -122,6 +123,7 @@ def inode_for_path(path, conn):
             raise KeyError('Path %s does not exist' % path)
 
     return inode
+
 
 def get_path(id_, conn, name=None):
     """Return a full path for inode `id_`.
@@ -224,6 +226,7 @@ def assert_fs_owner(path, mountpoint=False):
 
     return ctrlfile
 
+
 def assert_s3ql_mountpoint(mountpoint):
     '''Raise QuietError if *mountpoint* is not an S3QL mountpoint
 
@@ -237,6 +240,7 @@ def assert_s3ql_mountpoint(mountpoint):
 
     return ctrlfile
 
+
 def get_backend(options, raw=False):
     '''Return backend for given storage-url
 
@@ -248,6 +252,7 @@ def get_backend(options, raw=False):
         return options.backend_class(options)
     else:
         return get_backend_factory(options)()
+
 
 def get_backend_factory(options):
     '''Return factory producing backend objects'''
@@ -429,12 +434,14 @@ class AsyncFn(ExceptionStoringThread):
     def run_protected(self):
         self.target(*self.args, **self.kwargs)
 
+
 def split_by_n(seq, n):
     '''Yield elements in iterable *seq* in groups of *n*'''
 
     while seq:
         yield seq[:n]
         seq = seq[n:]
+
 
 def handle_on_return(fn):
     '''Provide fresh ExitStack instance in `on_return` argument'''
@@ -469,10 +476,10 @@ def parse_literal(buf, type_spec):
         raise ValueError('unable to parse as python literal')
 
     if (isinstance(type_spec, list) and type(obj) == list
-        and [ type(x) for x in obj ] == type_spec):
+            and [type(x) for x in obj] == type_spec):
         return obj
     elif (isinstance(type_spec, tuple) and type(obj) == tuple
-        and [ type(x) for x in obj ] == list(type_spec)):
+            and [type(x) for x in obj] == list(type_spec)):
         return obj
     elif type(obj) == type_spec:
         return obj

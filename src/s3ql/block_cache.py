@@ -340,7 +340,7 @@ class BlockCache(object):
         success = False
         async def with_event_loop(exc_info):
             if success:
-                self.db.update_object_size(obj_size, obj_id)
+                self.db.update_object_size(obj_id, obj_size)
                 el.dirty = False
             else:
                 exc = exc_info[1]

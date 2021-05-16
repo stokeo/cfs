@@ -13,7 +13,7 @@ from .block_cache import BlockCache
 from .common import (get_backend_factory,
                      is_mounted)
 from .daemonize import daemonize
-from .metadata import SqliteMetaBackend
+from .metadata import MetadataBackend
 from .inode_cache import InodeCache
 from .parse_args import ArgumentParser
 from contextlib import AsyncExitStack
@@ -172,7 +172,7 @@ async def main_async(options, stdout_log_handler):
 
     # Retrieve metadata
     with backend_pool() as backend:
-        db = SqliteMetaBackend(backend=backend, cachepath=cachepath)
+        db = MetadataBackend(backend=backend, cachepath=cachepath)
         param = db.param
 
 
@@ -203,18 +203,21 @@ async def main_async(options, stdout_log_handler):
 
     async with trio.open_nursery() as nursery:
       async with AsyncExitStack() as cm:
-        block_cache = BlockCache(backend_pool, db, cachepath + '-cache',
-                                 options.cachesize * 1024, options.max_cache_entries)
+        block_cache = BlockCache(
+            backend_pool, db, cachepath + '-cache',
+            options.cachesize * 1024, options.max_cache_entries)
         cm.push_async_callback(block_cache.destroy, options.keep_cache)
 
-        operations = fs.Operations(block_cache, db, max_obj_size=param['max_obj_size'],
-                                   inode_cache=InodeCache(db, param['inode_gen']),
-                                   upload_task=metadata_upload_task)
+        operations = fs.Operations(
+            block_cache, db, max_obj_size=param['max_obj_size'],
+            inode_cache=InodeCache(db, param['inode_gen']),
+            upload_task=metadata_upload_task)
         cm.push_async_callback(operations.destroy)
         block_cache.fs = operations
         metadata_upload_task.fs = operations
 
-        log.info('Mounting %s at %s...', options.storage_url, options.mountpoint)
+        log.info('Mounting %s at %s...', options.storage_url,
+                 options.mountpoint)
         try:
             pyfuse3.init(operations, options.mountpoint, get_fuse_opts(options))
         except RuntimeError as exc:
@@ -232,8 +235,9 @@ async def main_async(options, stdout_log_handler):
         else:
             if stdout_log_handler:
                 logging.getLogger().removeHandler(stdout_log_handler)
-            crit_log_fd = os.open(os.path.join(options.cachedir, 'mount.s3ql_crit.log'),
-                                  flags=os.O_APPEND|os.O_CREAT|os.O_WRONLY, mode=0o644)
+            crit_log_fd = os.open(
+                os.path.join(options.cachedir, 'mount.s3ql_crit.log'),
+                flags=os.O_APPEND|os.O_CREAT|os.O_WRONLY, mode=0o644)
             faulthandler.enable(crit_log_fd)
             faulthandler.register(signal.SIGUSR1, file=crit_log_fd)
             daemonize(options.cachedir)
@@ -370,7 +374,7 @@ def determine_threads(options):
         else:
             log.warning('Compression will require %d MiB memory '
                         '(%d%% of total system memory', mem_per_thread / 1024 ** 2,
-                     mem_per_thread * 100 / memory)
+                        mem_per_thread * 100 / memory)
             threads = 1
         return threads
     else:
@@ -441,46 +445,55 @@ def parse_args(args):
     parser.add_argument("mountpoint", metavar='<mountpoint>', type=os.path.abspath,
                         help='Where to mount the file system')
     parser.add_argument("--cachesize", type=int, default=None, metavar='<size>',
-                      help="Cache size in KiB (default: autodetect).")
-    parser.add_argument("--max-cache-entries", type=int, default=None, metavar='<num>',
-                      help="Maximum number of entries in cache (default: autodetect). "
-                      'Each cache entry requires one file descriptor, so if you increase '
-                      'this number you have to make sure that your process file descriptor '
-                      'limit (as set with `ulimit -n`) is high enough (at least the number '
-                      'of cache entries + 100).')
+                        help="Cache size in KiB (default: autodetect).")
+    parser.add_argument(
+        "--max-cache-entries", type=int, default=None, metavar='<num>',
+        help="Maximum number of entries in cache (default: autodetect). "
+        'Each cache entry requires one file descriptor, so if you increase '
+        'this number you have to make sure that your process file descriptor '
+        'limit (as set with `ulimit -n`) is high enough (at least the number '
+        'of cache entries + 100).')
     parser.add_argument("--keep-cache", action="store_true", default=False,
-                      help="Do not purge locally cached files on exit.")
-    parser.add_argument("--allow-other", action="store_true", default=False, help=
-                      'Normally, only the user who called `mount.s3ql` can access the mount '
-                      'point. This user then also has full access to it, independent of '
-                      'individual file permissions. If the `--allow-other` option is '
-                      'specified, other users can access the mount point as well and '
-                      'individual file permissions are taken into account for all users.')
-    parser.add_argument("--allow-root", action="store_true", default=False,
-                      help='Like `--allow-other`, but restrict access to the mounting '
-                           'user and the root user.')
-    parser.add_argument("--dirty-block-upload-delay", action="store", type=int,
-                      default=10, metavar='<seconds>',
-                      help="Upload delay for dirty blocks in seconds (default: 10 seconds).")
+                        help="Do not purge locally cached files on exit.")
+    parser.add_argument(
+        "--allow-other", action="store_true", default=False, help=
+        'Normally, only the user who called `mount.s3ql` can access the mount '
+        'point. This user then also has full access to it, independent of '
+        'individual file permissions. If the `--allow-other` option is '
+        'specified, other users can access the mount point as well and '
+        'individual file permissions are taken into account for all users.')
+    parser.add_argument(
+        "--allow-root", action="store_true", default=False,
+        help='Like `--allow-other`, but restrict access to the mounting '
+        'user and the root user.')
+    parser.add_argument(
+        "--dirty-block-upload-delay", action="store", type=int,
+        default=10, metavar='<seconds>',
+        help="Upload delay for dirty blocks in seconds (default: 10 seconds).")
     parser.add_argument("--fg", action="store_true", default=False,
-                      help="Do not daemonize, stay in foreground")
-    parser.add_argument("--fs-name", default=None,
-                      help="Mount name passed to fuse, the name will be shown in the first "
-                           "column of the system mount command output. If not specified your "
-                           "storage url is used.")
-    parser.add_argument("--systemd", action="store_true", default=False,
-                      help="Run as systemd unit. Consider specifying --log none as well "
-                           "to make use of journald.")
-    parser.add_argument("--metadata-upload-interval", action="store", type=int,
-                      default=24 * 60 * 60, metavar='<seconds>',
-                      help='Interval in seconds between complete metadata uploads. '
-                           'Set to 0 to disable. Default: 24h.')
-    parser.add_argument("--threads", action="store", type=int,
-                      default=None, metavar='<no>',
-                      help='Number of parallel upload threads to use (default: auto).')
-    parser.add_argument("--nfs", action="store_true", default=False,
-                      help='Enable some optimizations for exporting the file system '
-                           'over NFS. (default: %(default)s)')
+                        help="Do not daemonize, stay in foreground")
+    parser.add_argument(
+        "--fs-name", default=None,
+        help="Mount name passed to fuse, the name will be shown in the first "
+        "column of the system mount command output. If not specified your "
+        "storage url is used.")
+    parser.add_argument(
+        "--systemd", action="store_true", default=False,
+        help="Run as systemd unit. Consider specifying --log none as well "
+        "to make use of journald.")
+    parser.add_argument(
+        "--metadata-upload-interval", action="store", type=int,
+        default=24 * 60 * 60, metavar='<seconds>',
+        help='Interval in seconds between complete metadata uploads. '
+        'Set to 0 to disable. Default: 24h.')
+    parser.add_argument(
+        "--threads", action="store", type=int,
+        default=None, metavar='<no>',
+        help='Number of parallel upload threads to use (default: auto).')
+    parser.add_argument(
+        "--nfs", action="store_true", default=False,
+        help='Enable some optimizations for exporting the file system '
+        'over NFS. (default: %(default)s)')
     parser.add_argument("--profile", action="store_true", default=False,
                         help=argparse.SUPPRESS)
 
@@ -522,7 +535,8 @@ def setup_exchook():
                 log.warning("Unhandled top-level exception during shutdown "
                             "(will not be re-raised)")
             else:
-                log.error("Unhandled exception in thread, terminating", exc_info=True)
+                log.error("Unhandled exception in thread, terminating",
+                          exc_info=True)
                 exc_info.append(exc_inst)
                 exc_info.append(tb)
                 trio.from_thread.run_sync(

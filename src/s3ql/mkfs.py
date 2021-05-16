@@ -10,7 +10,7 @@ from .logging import logging, setup_logging, QuietError
 from .backends.comprenc import ComprencBackend
 from .backends import s3
 from .common import (get_backend, split_by_n, freeze_basic_mapping)
-from .metadata import SqliteMetaBackend
+from .metadata import MetadataBackend
 from .parse_args import ArgumentParser
 from getpass import getpass
 from base64 import b64encode
@@ -37,10 +37,11 @@ def parse_args(args):
 
     parser.add_argument("-L", default='', help="Filesystem label",
                         dest="label", metavar='<name>',)
-    parser.add_argument("--max-obj-size", type=int, default=10240, metavar='<size>',
-                        help="Maximum size of storage objects in KiB. Files bigger than this "
-                           "will be spread over multiple objects in the storage backend. "
-                           "Default: %(default)d KiB.")
+    parser.add_argument(
+        "--max-obj-size", type=int, default=10240, metavar='<size>',
+        help="Maximum size of storage objects in KiB. Files bigger than this "
+        "will be spread over multiple objects in the storage backend. "
+        "Default: %(default)d KiB.")
     parser.add_argument("--plain", action="store_true", default=False,
                         help="Create unencrypted file system.")
 
@@ -60,7 +61,7 @@ def main(args=None):
     if options.max_obj_size < 1024:
         # This warning should never be converrted to an exception
         log.warning('Maximum object sizes less than 1 MiB will degrade '
-                    'performance.', extra={ 'force_log': True })
+                    'performance.', extra={'force_log': True})
 
     plain_backend = get_backend(options, raw=True)
     atexit.register(plain_backend.close)
@@ -69,9 +70,10 @@ def main(args=None):
              "the 'Important Rules to Avoid Losing Data' section.")
 
     if isinstance(plain_backend, s3.Backend) and '.' in plain_backend.bucket_name:
-        log.warning('S3 Buckets with names containing dots cannot be '
-                    'accessed using SSL!'
-                    '(cf. https://forums.aws.amazon.com/thread.jspa?threadID=130560)')
+        log.warning(
+            'S3 Buckets with names containing dots cannot be '
+            'accessed using SSL!'
+            '(cf. https://forums.aws.amazon.com/thread.jspa?threadID=130560)')
 
     if 's3ql_metadata' in plain_backend:
         raise QuietError("Refusing to overwrite existing file system! "
@@ -113,8 +115,8 @@ def main(args=None):
         shutil.rmtree(cachepath + '-cache')
 
     log.info('Creating metadata tables...')
-    db = SqliteMetaBackend(backend=backend, cachepath=cachepath,
-                           mkfs=True, mkfsopts=options)
+    db = MetadataBackend(backend=backend, cachepath=cachepath,
+                         mkfs=True, mkfsopts=options)
     param = db.param
 
     backend.store('s3ql_seq_no_%d' % param['seq_no'], b'Empty')

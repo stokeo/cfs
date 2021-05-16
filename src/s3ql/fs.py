@@ -206,8 +206,7 @@ class Operations(pyfuse3.Operations):
         with self.db.readdir(id_, off-3) as res:
             for (next_, name, cid_) in res:
                 if not pyfuse3.readdir_reply(
-                        token, name, self.inodes[cid_].entry_attributes(),
-                        next_+3):
+                        token, name, self.inodes[cid_].entry_attributes(), next_+3):
                     break
                 self.open_inodes[cid_] += 1
 

@@ -73,7 +73,7 @@ ATTRIBUTES = ('mode', 'refcount', 'uid', 'gid', 'size', 'locked',
 ATTRIBUTE_STR = ', '.join(ATTRIBUTES)
 
 
-class SqliteMetaBackend(object):
+class MetadataBackend(object):
     def __init__(self, backend=None, cachepath=None,
                  mkfs=False, mkfsopts=None):
         self.backend = backend
@@ -274,12 +274,6 @@ class SqliteMetaBackend(object):
             "SELECT target FROM symlink_targets WHERE inode=?",
             (inodeid,))
 
-    def readdir(self, inodeid, off):
-        return self.db.query(
-            "SELECT name_id, name, inode FROM contents_v "
-            'WHERE parent_inode=? AND name_id > ? ORDER BY name_id',
-            (inodeid, off))
-
     def getxattr(self, inodeid, name):
         return self.db.get_val(
             'SELECT value FROM ext_attributes_v WHERE inode=? AND name=?',
@@ -309,14 +303,20 @@ class SqliteMetaBackend(object):
         self.db.execute('INSERT INTO symlink_targets (inode, target) VALUES(?,?)',
                         (inodeid, target))
 
+    def is_directory(self, inodeid):
+        return self.db.has_val('SELECT 1 FROM contents WHERE parent_inode=?',
+                               (inodeid,))
+
+    def readdir(self, inodeid, off):
+        return self.db.query(
+            "SELECT name_id, name, inode FROM contents_v "
+            'WHERE parent_inode=? AND name_id > ? ORDER BY name_id',
+            (inodeid, off))
+
     def list_directory(self, parent_inode, off):
         return self.db.query(
             'SELECT name_id, inode FROM contents WHERE parent_inode=? '
             'AND name_id > ? ORDER BY name_id', (parent_inode, off))
-
-    def is_directory(self, inodeid):
-        return self.db.has_val('SELECT 1 FROM contents WHERE parent_inode=?',
-                               (inodeid,))
 
     def batch_list_dir(self, batch_size, parent_inode):
         return self.db.get_list(
@@ -345,12 +345,10 @@ class SqliteMetaBackend(object):
             'WHERE inode = ? GROUP BY id', (new_id,))
         return processed
 
-    def copy_tree_dirs(self, name_id, id_new, target_id):
+    def copy_tree_dirs(self, name, id_new, target_id):
         self.db.execute(
-            'INSERT INTO contents (name_id, inode, parent_inode) VALUES(?, ?, ?)',
-            (name_id, id_new, target_id))
-        self.db.execute('UPDATE names SET refcount=refcount+1 WHERE id=?',
-                        (name_id,))
+            'INSERT INTO contents (name, inode, parent_inode) VALUES(?, ?, ?)',
+            (name, id_new, target_id))
 
     def make_copy_visible(self, inodeid, tmpid):
         self.db.execute('UPDATE contents SET parent_inode=? WHERE parent_inode=?',
