@@ -156,7 +156,7 @@ class Operations(pyfuse3.Operations):
 
         else:
             try:
-                id_ = self.db.get_dirent_inode(id_p, name)
+                id_ = self.db.get_dirent_inode(name, id_p)
             except NoSuchRowError:
                 raise FUSEError(errno.ENOENT)
             inode = self.inodes[id_]
