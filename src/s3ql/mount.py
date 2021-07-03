@@ -172,7 +172,8 @@ async def main_async(options, stdout_log_handler):
 
     # Retrieve metadata
     with backend_pool() as backend:
-        db = MetadataBackend(backend=backend, cachepath=cachepath)
+        db = MetadataBackend(backend=backend, cachepath=cachepath,
+                             options=options)
         param = db.param
 
 

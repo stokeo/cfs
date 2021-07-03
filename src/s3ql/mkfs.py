@@ -116,7 +116,7 @@ def main(args=None):
 
     log.info('Creating metadata tables...')
     db = MetadataBackend(backend=backend, cachepath=cachepath,
-                         mkfs=True, mkfsopts=options)
+                         mkfs=True, options=options)
     param = db.param
 
     backend.store('s3ql_seq_no_%d' % param['seq_no'], b'Empty')

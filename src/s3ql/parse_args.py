@@ -181,9 +181,9 @@ class ArgumentParser(argparse.ArgumentParser):
                           type=storage_url_type,
                           help='Storage URL of the backend that contains the file system')
         self.add_argument("--authfile", type=str, metavar='<path>',
-                      default=os.path.expanduser("~/.s3ql/authinfo2"),
-                      help='Read authentication credentials from this file '
-                           '(default: `~/.s3ql/authinfo2)`')
+                          default=os.path.expanduser("~/.s3ql/authinfo2"),
+                          help='Read authentication credentials from this file '
+                          '(default: `~/.s3ql/authinfo2)`')
 
     def add_compress(self):
         def compression_type(s):
