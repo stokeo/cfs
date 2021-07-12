@@ -460,8 +460,8 @@ class Operations(pyfuse3.Operations):
             (src_id, target_id, off) = queue.pop()
             log.debug('Processing directory (%d, %d, %d)', src_id, target_id, off)
             processed = 0
-            with db.list_directory(src_id, off) as res:
-                for (name_id, id_) in res:
+            with db.readdir(src_id, off) as res:
+                for (name_id, name, id_) in res:
 
                     # Make sure that all blocks are in the database
                     if id_ in self.open_inodes:
@@ -487,7 +487,7 @@ class Operations(pyfuse3.Operations):
                         id_new = id_cache[id_]
                         self.inodes[id_new].refcount += 1
 
-                    db.copy_tree_dirs(name_id, id_new, target_id)
+                    db.copy_tree_dirs(name, id_new, target_id)
 
                     # Break every once in a while - note that we can't yield
                     # right here because there's an active DB query.
