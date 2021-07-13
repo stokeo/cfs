@@ -642,7 +642,7 @@ class Operations(pyfuse3.Operations):
             raise FUSEError(errno.EINVAL)
 
         # Replace target
-        self.db.replace_target(name_new, id_old, id_p_old, id_p_new)
+        self.db.replace_target(name_new, name_old, id_old, id_p_old, id_p_new)
 
         inode_new = self.inodes[id_new]
         inode_new.refcount -= 1
