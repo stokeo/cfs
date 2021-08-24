@@ -34,6 +34,8 @@ import trio
 import time
 import shutil
 import atexit
+# import tracemalloc
+
 
 log = logging.getLogger(__name__)
 
@@ -67,7 +69,6 @@ install_thread_excepthook()
 
 def main(args=None):
     '''Mount S3QL file system'''
-
     if args is None:
         args = sys.argv[1:]
 
@@ -246,6 +247,10 @@ async def main_async(options, stdout_log_handler):
         db.mark_metadata_dirty()
 
         block_cache.init(options.threads)
+
+        # memprofiler = MemProfilerTask()
+        # nursery.start_soon(memprofiler.run, name='mem-profiler')
+        # cm.callback(memprofiler.stop)
 
         nursery.start_soon(metadata_upload_task.run, name='metadata-upload-task')
         cm.callback(metadata_upload_task.stop)
@@ -606,6 +611,32 @@ class CommitTask:
 
         log.debug('started')
         self.stop_event.set()
+
+
+# class MemProfilerTask:
+#     def __init__(self):
+#         super().__init__()
+#         self.event = trio.Event()
+#         self.quit = False
+
+#     async def run(self):
+#         log.debug('start')
+
+#         while not self.quit:
+#             snapshot = tracemalloc.take_snapshot()
+#             snapshot.dump('/root/.s3ql/memsnap{}'.format(int(time.time())))
+#             with trio.move_on_after(1):
+#                 await self.event.wait()
+#             if self.quit:
+#                 break
+
+#         log.debug('finished')
+
+#     def stop(self):
+#         '''Signal thread to terminate'''
+#         log.debug('started')
+#         self.quit = True
+#         self.event.set()
 
 
 if __name__ == '__main__':
