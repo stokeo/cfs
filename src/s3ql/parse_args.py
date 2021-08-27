@@ -33,7 +33,7 @@ are:
 # Pylint really gets confused by this module
 #pylint: disable-all
 
-from .logging import logging # Ensure use of custom logger class
+from .logging import logging  # Ensure use of custom logger class
 from . import RELEASE
 from .backends import prefix_map
 from .common import _escape
@@ -49,6 +49,7 @@ import re
 DEFAULT_USAGE = object()
 log = logging.getLogger(__name__)
 
+
 class HelpFormatter(argparse.HelpFormatter):
 
     def _format_usage(self, usage, actions, groups, prefix):
@@ -62,7 +63,7 @@ class HelpFormatter(argparse.HelpFormatter):
 
         if isinstance(usage, list):
             # Omit help argument
-            actions = [ x for x in actions if not isinstance(x, argparse._HelpAction) ]
+            actions = [x for x in actions if not isinstance(x, argparse._HelpAction)]
             res = []
             for s in usage:
                 if not res:
@@ -164,13 +165,13 @@ class ArgumentParser(argparse.ArgumentParser):
 
     def add_cachedir(self):
         self.add_argument("--cachedir", type=str, metavar='<path>',
-                      default=os.path.expanduser("~/.s3ql"),
-                      help='Store cached data in this directory '
-                           '(default: `~/.s3ql)`')
+                          default=os.path.expanduser("~/.s3ql"),
+                          help='Store cached data in this directory '
+                          '(default: `~/.s3ql)`')
 
     def add_log(self, default=None):
         self.add_argument("--log", type=str_or_None_type, metavar='<target>', default=default,
-                      help='Destination for log messages. Specify ``none`` for standard '
+                          help='Destination for log messages. Specify ``none`` for standard '
                           'output or ``syslog`` for the system logging daemon. '
                           'Anything else will be interpreted as a file name. Log files '
                           'will be rotated when they reach 1 MiB, and at most 5 old log '
@@ -202,11 +203,11 @@ class ArgumentParser(argparse.ArgumentParser):
                 alg = None
             return (alg, lvl)
         self.add_argument("--compress", action="store", default='lzma-6',
-                            metavar='<algorithm-lvl>', type=compression_type,
-                            help="Compression algorithm and compression level to use when "
-                                 "storing new data. *algorithm* may be any of `lzma`, `bzip2`, "
-                                 "`zlib`, or none. *lvl* may be any integer from 0 (fastest) "
-                                 "to 9 (slowest). Default: `%(default)s`")
+                          metavar='<algorithm-lvl>', type=compression_type,
+                          help="Compression algorithm and compression level to use when "
+                          "storing new data. *algorithm* may be any of `lzma`, `bzip2`, "
+                          "`zlib`, or none. *lvl* may be any integer from 0 (fastest) "
+                          "to 9 (slowest). Default: `%(default)s`")
 
     def add_subparsers(self, **kw):
         '''Pass parent and set prog to default usage message'''
@@ -257,19 +258,19 @@ class ArgumentParser(argparse.ArgumentParser):
             ini_config = self._read_authinfo(options.authfile, storage_url)
 
             # Validate configuration file
-            fixed_keys = { 'backend-login', 'backend-password', 'fs-passphrase',
-                           'storage-url' }
+            fixed_keys = {'backend-login', 'backend-password', 'fs-passphrase',
+                          'storage-url', 'db-host'}
             unknown_keys = (set(ini_config.keys())
-                            - { x.replace('_', '-') for x in options.__dict__.keys() }
+                            - {x.replace('_', '-') for x in options.__dict__.keys()}
                             - fixed_keys)
             if unknown_keys:
-                            self.exit(2, 'Unknown keys(s) in configuration file: ' +
-                                      ', '.join(unknown_keys))
+                self.exit(2, 'Unknown keys(s) in configuration file: ' +
+                          ', '.join(unknown_keys))
 
             # Update defaults and re-parse arguments
-            defaults = { k.replace('-', '_'): v
-                         for (k,v) in ini_config.items()
-                         if k != 'storage_url' }
+            defaults = {k.replace('-', '_'): v
+                        for (k, v) in ini_config.items()
+                        if k != 'storage_url'}
             self.set_defaults(**defaults)
             options = super().parse_args(*args, **kwargs)
 
@@ -350,10 +351,12 @@ def storage_url_type(s):
 
     return s
 
+
 def str_or_None_type(s):
     if s.lower() == 'none':
         return None
     return s
+
 
 def suboptions_type(s):
     '''An argument converter for suboptions
