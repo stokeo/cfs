@@ -35,6 +35,7 @@ sys.path.insert(0, os.path.join(basedir, 'src'))
 sys.path.insert(0, os.path.join(basedir, 'util'))
 import s3ql
 
+
 class build_docs(setuptools.Command):
     description = 'Build Sphinx documentation'
     user_options = [
@@ -145,7 +146,7 @@ def main():
 
                      # Need trio.lowlevel
                      'trio >= 0.15',
-                     'pyfuse3 >= 3.2.0, < 4.0' ]
+                     'pyfuse3 >= 3.2.0, < 4.0']
     if sys.version_info < (3, 7, 0):
         required_pkgs.append('async_generator')
 
@@ -190,11 +191,12 @@ def main():
                          's3qladm = s3ql.adm:main',
                          's3qlctrl = s3ql.ctrl:main',
                          's3qllock = s3ql.lock:main',
+                         's3qlln = s3ql.hlink:main',
                          's3qlrm = s3ql.remove:main',
                          's3ql_oauth_client = s3ql.oauth_client:main',
                          's3ql_verify = s3ql.verify:main',
                          ]
-                          },
+                        },
           install_requires=required_pkgs,
           tests_require=['pytest >= 3.7'],
           cmdclass={'upload_docs': upload_docs,
@@ -222,7 +224,7 @@ class build_cython(setuptools.Command):
         for c in ('cython3', 'cython'):
             try:
                 version = subprocess.check_output([c, '--version'],
-                                              universal_newlines=True, stderr=subprocess.STDOUT)
+                                                  universal_newlines=True, stderr=subprocess.STDOUT)
                 cython = c
             except FileNotFoundError:
                 pass
@@ -234,12 +236,12 @@ class build_cython(setuptools.Command):
             raise SystemExit('Need Cython 0.17 or newer, found ' + version)
 
         cmd = [cython, '-Wextra', '-f', '-3',
-               '-X', 'embedsignature=True' ]
+               '-X', 'embedsignature=True']
         if DEVELOPER_MODE:
             cmd.append('-Werror')
 
         # Work around http://trac.cython.org/cython_trac/ticket/714
-        cmd += ['-X', 'warn.maybe_uninitialized=False' ]
+        cmd += ['-X', 'warn.maybe_uninitialized=False']
 
         for extension in self.extensions:
             for file_ in extension.sources:
@@ -251,6 +253,7 @@ class build_cython(setuptools.Command):
                     print('compiling %s to %s' % (file_ + '.pyx', file_ + ext))
                     if subprocess.call(cmd + [path + '.pyx']) != 0:
                         raise SystemExit('Cython compilation failed')
+
 
 class upload_docs(setuptools.Command):
     user_options = []
@@ -268,6 +271,7 @@ class upload_docs(setuptools.Command):
                                'ebox.rath.org:/srv/www.rath.org/s3ql-docs/'])
         subprocess.check_call(['rsync', '-aHv', '--del', os.path.join(basedir, 'doc', 'manual.pdf'),
                                'ebox.rath.org:/srv/www.rath.org/s3ql-docs/'])
+
 
 def fix_docutils():
     '''Work around https://bitbucket.org/birkenfeld/sphinx/issue/1154/'''
