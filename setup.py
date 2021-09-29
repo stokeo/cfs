@@ -36,72 +36,6 @@ sys.path.insert(0, os.path.join(basedir, 'util'))
 import s3ql
 
 
-class build_docs(setuptools.Command):
-    description = 'Build Sphinx documentation'
-    user_options = [
-        ('fresh-env', 'E', 'discard saved environment'),
-        ('all-files', 'a', 'build all files'),
-    ]
-    boolean_options = ['fresh-env', 'all-files']
-
-    def initialize_options(self):
-        self.fresh_env = False
-        self.all_files = False
-
-    def finalize_options(self):
-        pass
-
-    def run(self):
-        try:
-            from sphinx.application import Sphinx
-            from docutils.utils import SystemMessage
-        except ModuleNotFoundError:
-            raise SystemExit('This command requires Sphinx to be installed.') from None
-
-        fix_docutils()
-
-        dest_dir = os.path.join(basedir, 'doc')
-        src_dir = os.path.join(basedir, 'rst')
-
-        confoverrides = {}
-        confoverrides['version'] = s3ql.VERSION
-        confoverrides['release'] = s3ql.RELEASE
-
-        for builder in ('html', 'latex', 'man'):
-            print('Running %s builder...' % builder)
-            self.mkpath(os.path.join(dest_dir, builder))
-            app = Sphinx(srcdir=src_dir, confdir=src_dir,
-                         outdir=os.path.join(dest_dir, builder),
-                         doctreedir=os.path.join(dest_dir, 'doctrees'),
-                         buildername=builder, confoverrides=confoverrides,
-                         freshenv=self.fresh_env)
-            self.fresh_env = False
-            self.all_files = False
-
-            try:
-                if self.all_files:
-                    app.builder.build_all()
-                else:
-                    app.builder.build_update()
-            except SystemMessage as err:
-                print('reST markup error:',
-                      err.args[0].encode('ascii', 'backslashreplace'),
-                      file=sys.stderr)
-
-        # These shouldn't be installed by default
-        for name in ('expire_backups.1', 'pcp.1'):
-            os.rename(os.path.join(dest_dir, 'man', name),
-                      os.path.join(basedir, 'contrib', name))
-
-        print('Running pdflatex...')
-        for _ in range(3):
-            with open('/dev/null', 'wb') as null:
-                subprocess.check_call(['pdflatex', '-interaction', 'batchmode', 'manual.tex'],
-                                      cwd=os.path.join(dest_dir, 'latex'), stdout=null)
-        os.rename(os.path.join(dest_dir, 'latex', 'manual.pdf'),
-                  os.path.join(dest_dir, 'manual.pdf'))
-
-
 class pytest(TestCommand):
 
     def run_tests(self):
@@ -152,7 +86,7 @@ def main():
 
     setuptools.setup(
           name='s3ql',
-          zip_safe=True,
+          zip_safe=False,
           version=s3ql.VERSION,
           description='a full-featured file system for online data storage',
           long_description=long_desc,
@@ -178,8 +112,8 @@ def main():
                                  extra_compile_args=compile_args,
                                  extra_link_args=[ '-lsqlite3'])],
           data_files=[ ('share/man/man1',
-                          [ os.path.join('doc/man/', x) for x
-                            in glob(os.path.join(basedir, 'doc', 'man', '*.1')) ]) ],
+                          [ os.path.join('doc/manpages/', x) for x
+                            in glob(os.path.join(basedir, 'doc', 'manpages', '*.1')) ]) ],
           entry_points={ 'console_scripts':
                         [
                          'mkfs.s3ql = s3ql.mkfs:main',
@@ -201,9 +135,7 @@ def main():
           tests_require=['pytest >= 3.7'],
           cmdclass={'upload_docs': upload_docs,
                     'build_cython': build_cython,
-                    'build_sphinx': build_docs,
                     'pytest': pytest },
-          command_options={ 'sdist': { 'formats': ('setup.py', 'bztar') } },
          )
 
 class build_cython(setuptools.Command):

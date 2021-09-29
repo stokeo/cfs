@@ -3,11 +3,10 @@
 * Bump version in `src/s3ql/__init__.py`
 * Add release date to `Changes.txt`
 * Update authors: `git log --all --pretty="format:%an <%aE>" | sort -u >> AUTHORS`
-* `./setup.py build_cython build_ext --inplace`
-* `./setup.py build_sphinx sdist`
+* `./make_release.sh`
 * Test tarball:
   * `./setup.py build_ext --inplace`
-  * `./setup.py build_sphinx`
+  * `./build_docs.sh'
   * `python3 -m pytest tests/`
 * Generate signature: `gpg -sb --armor XXXX.tar.bz2`
 * `git commit --all -m "Released XXX"`
