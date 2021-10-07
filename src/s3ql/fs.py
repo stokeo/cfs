@@ -471,6 +471,10 @@ class Operations(pyfuse3.Operations):
             processed = 0
             with db.readdir(src_id, off) as res:
                 for (name_id, name, id_) in res:
+                    # exclude snapshots directory
+                    # TODO avoid hardcoded dir name (use inode property for ex)
+                    if name == ".snapshots":
+                        continue
 
                     # Make sure that all blocks are in the database
                     if id_ in self.open_inodes:
