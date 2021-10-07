@@ -323,7 +323,7 @@ class MetadataBackend(object):
             'SELECT name, name_id, inode FROM contents_v WHERE '
             'parent_inode=? LIMIT %d' % batch_size, (parent_inode,))
 
-    def copy_tree_files(self, cur_id, new_id):
+    def copy_tree_files(self, new_id, cur_id):
         self.db.execute('INSERT INTO symlink_targets (inode, target) '
                         'SELECT ?, target FROM symlink_targets WHERE inode=?',
                         (new_id, cur_id))
