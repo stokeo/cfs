@@ -368,7 +368,7 @@ class MetadataBackend(object):
             try:
                 self.db.get_val(
                     "SELECT value FROM params WHERE name=%s AND node=%s",
-                    ('last_inodeid', self.nodeid))
+                    ('last_inodeid', i))
             except NoSuchRowError:
                 if i == low_taken + 1:
                     return i
