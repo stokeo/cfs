@@ -3,6 +3,18 @@
   file is rendered by GitHub.
 
 ======
+ CFS
+======
+
+CFS is a fork of S3QL aiming to give simultaneous mount ability and
+improve robustness with cyberattacks and hardware failures resistance.
+
+
+
+
+Original S3QL readme :
+
+======
  S3QL
 ======
 
