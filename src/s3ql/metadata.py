@@ -480,7 +480,7 @@ class MetadataBackend(object):
     def batch_list_dir(self, batch_size, parent_inode):
         log.debug("{}, {}".format(batch_size, parent_inode))
         direntries = self.db.get_list(self.prepared_requests["batch_list_dir"],
-                                      (batch_size, parent_inode))
+                                      (parent_inode, batch_size))
         return enumerate(direntries)
 
     def delete_dirent(self, name, parent_inode):
