@@ -481,7 +481,15 @@ class MetadataBackend(object):
         log.debug("{}, {}".format(batch_size, parent_inode))
         direntries = self.db.get_list(self.prepared_requests["batch_list_dir"],
                                       (parent_inode, batch_size))
-        return enumerate(direntries)
+
+        @contextmanager
+        def ctxwrap():
+            def gen():
+                for i, row in enumerate(direntries):
+                    yield (row.name, i, row.inode)
+            yield gen()
+
+        return ctxwrap()
 
     def delete_dirent(self, name, parent_inode):
         log.debug("{}, {}".format(name, parent_inode))
