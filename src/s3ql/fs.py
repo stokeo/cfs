@@ -400,7 +400,7 @@ class Operations(pyfuse3.Operations):
             # This is also a nice opportunity to release the GIL...
             query_chunk = self.db.batch_list_dir(batch_size, id_p)
             reinserted = False
-            for (name, name_id, id_) in query_chunk:
+            for (name, id_) in query_chunk:
                 if self.db.is_directory(id_):
                     # First delete subdirectories
                     if not reinserted:
