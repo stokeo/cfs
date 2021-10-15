@@ -473,7 +473,7 @@ class Operations(pyfuse3.Operations):
                 for (name_id, name, id_) in res:
                     # exclude snapshots directory
                     # TODO avoid hardcoded dir name (use inode property for ex)
-                    if name == ".snapshots":
+                    if name == b'.snapshots':
                         continue
 
                     # Make sure that all blocks are in the database
@@ -930,7 +930,7 @@ class Operations(pyfuse3.Operations):
 
         Unless EOF is reached, returns exactly `size` bytes.
         '''
-        # log.debug('started with %d, %d, %d', fh, offset, length)
+        log.debug('started with %d, %d, %d', fh, offset, length)
         buf = BytesIO()
         inode = self.inodes[fh]
 
@@ -956,7 +956,7 @@ class Operations(pyfuse3.Operations):
 
     async def write(self, fh, offset, buf):
         '''Handle FUSE write requests.'''
-        # log.debug('started with %d, %d, datalen=%d', fh, offset, len(buf))
+        log.debug('started with %d, %d, datalen=%d', fh, offset, len(buf))
 
         if self.failsafe or self.inodes[fh].locked:
             raise FUSEError(errno.EPERM)

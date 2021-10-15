@@ -663,7 +663,7 @@ class MetadataBackend(object):
                     if x != 'refcount'] + [inode.id]
         log.debug(bindings)
         old_ino = self.db.get_row(self.prepared_requests["get_inode1"],
-                              (inode.id,))
+                                  (inode.id,))
         self.db.execute(self.prepared_requests["update_inode1"], bindings)
         self._inodesize_sum += getattr(inode, "size") - old_ino.size
         # self.db.execute(self.prepared_requests["update_inode2"],
