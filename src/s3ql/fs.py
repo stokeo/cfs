@@ -977,8 +977,6 @@ class Operations(pyfuse3.Operations):
         inode.size = max(inode.size, minsize)
         inode.mtime_ns = now_ns
         inode.ctime_ns = now_ns
-        # TODO write data and commit metadata to DB
-        self.cache.upload_if_dirty()
 
         return total
 
