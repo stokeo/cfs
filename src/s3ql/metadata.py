@@ -299,7 +299,7 @@ class MetadataBackend(object):
             "deref_block4": "DELETE FROM blocks WHERE id=?",
             "deref_block5": "DELETE FROM blocks_by_hash WHERE hash=?",
             "deref_block6": "DELETE FROM blocks_by_objid WHERE objid=?",
-            "deref_block7": "SELECT size FROM objects WHERE id=?",
+            "object_size": "SELECT size FROM objects WHERE id=?",
             "deref_block8": "SELECT refcount FROM objects_refcount WHERE id=?",
             "deref_block9": ("UPDATE objects_refcount SET refcount=refcount-1 "
                              "WHERE id=?"),
@@ -700,7 +700,7 @@ class MetadataBackend(object):
     def update_object_size(self, obj_id, obj_size):
         """ called after successfull block upload """
         log.debug("{} {}".format(obj_id, obj_size))
-        oldsize = self.db.get_val(self.prepared_requests["deref_block7"],
+        oldsize = self.db.get_val(self.prepared_requests["object_size"],
                                   (obj_id,))
         self.db.execute(self.prepared_requests["update_object_size"],
                         (obj_size, obj_id))
@@ -786,7 +786,7 @@ class MetadataBackend(object):
         self.db.execute(self.prepared_requests["deref_block6"], (obj_id,))
         self._blocksize_sum -= size
         obj_size = self.db.get_val(
-            self.prepared_requests["deref_block7"], (obj_id,))
+            self.prepared_requests["object_size"], (obj_id,))
         refcount = self.db.get_val(
             self.prepared_requests["deref_block8"], (obj_id,))
         if refcount > 1:

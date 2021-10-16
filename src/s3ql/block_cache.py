@@ -663,7 +663,10 @@ class BlockCache(object):
             block_id = self.db.get_block_id(inode, blockno)
             # No corresponding object
             if block_id is None:
-                log.debug('creating new block')
+                # TODO test if object exist and of size -1 (it means blocks
+                # are uploading) ?
+                log.debug(
+                    'uploading from another node ? reply with empty block')
                 el = CacheEntry(inode, blockno, filename)
                 self.cache[(inode, blockno)] = el
                 return el
