@@ -977,6 +977,8 @@ class Operations(pyfuse3.Operations):
         inode.size = max(inode.size, minsize)
         inode.mtime_ns = now_ns
         inode.ctime_ns = now_ns
+        # commit changes to database
+        self.inodes.setattr(inode)
 
         return total
 
