@@ -10,10 +10,12 @@ from .logging import logging  # Ensure use of custom logger class
 from .database import NoSuchRowError
 import pyfuse3
 import sys
+import datetime
 
 log = logging.getLogger(__name__)
 
 CACHE_SIZE = 100
+CACHE_TIMEOUT = datetime.timedelta(seconds=30)
 ATTRIBUTES = ('mode', 'refcount', 'uid', 'gid', 'size', 'locked',
               'rdev', 'atime_ns', 'mtime_ns', 'ctime_ns', 'id')
 ATTRIBUTE_STR = ', '.join(ATTRIBUTES)
@@ -31,6 +33,7 @@ class _Inode:
         super().__init__()
         self.dirty = False
         self.generation = generation
+        self.cached_time = datetime.datetime.now(datetime.timezone.utc)
 
     def entry_attributes(self):
         attr = pyfuse3.EntryAttributes()
@@ -73,6 +76,7 @@ class _Inode:
 
         for attr in ATTRIBUTES:
             setattr(copy, attr, getattr(self, attr))
+        copy.cached_time = self.cached_time
 
         return copy
 
@@ -154,6 +158,9 @@ class InodeCache(object):
 
     def __getitem__(self, id_):
         try:
+            if (self.attrs[id_].cached_time + CACHE_TIMEOUT
+                    < datetime.datetime.now(datetime.timezone.utc)):
+                raise KeyError
             return self.attrs[id_]
         except KeyError:
             try:

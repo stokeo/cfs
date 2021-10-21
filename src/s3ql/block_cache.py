@@ -14,6 +14,7 @@ from .logging import logging  # Ensure use of custom logger class
 from collections import OrderedDict
 from queue import Queue, Empty as QueueEmpty, Full as QueueFull
 from argparse import Namespace
+import datetime
 import os
 import hashlib
 import shutil
@@ -37,6 +38,8 @@ QuitSentinel = object()
 # Special queue entry that signals that removal queue should
 # be flushed
 FlushSentinel = object()
+
+CACHE_TIMEOUT = datetime.timedelta(seconds=30)
 
 
 class NoWorkerThreads(Exception):
@@ -74,6 +77,7 @@ class CacheEntry(object):
         self.last_write = 0
         self.pos = self.fh.tell()
         self.size = os.fstat(self.fh.fileno()).st_size
+        self.cached_time = datetime.datetime.now(datetime.timezone.utc)
 
     def read(self, size=None):
         buf = self.fh.read(size)
@@ -194,7 +198,7 @@ class BlockCache(object):
         else:
             os.mkdir(self.path)
 
-        # Initialized fromt the outside to prevent cyclic dependency,
+        # Initialized from the outside to prevent cyclic dependency,
         # used only to set failsafe attribute
         self.fs = Namespace()
 
@@ -654,6 +658,10 @@ class BlockCache(object):
 
         log.debug('started with %d, %d', inode, blockno)
         try:
+            if (self.cache[(inode, blockno)].cached_time + CACHE_TIMEOUT
+                    < datetime.datetime.now(datetime.timezone.utc)):
+                raise KeyError
+
             el = self.cache[(inode, blockno)]
 
         # Not in cache
