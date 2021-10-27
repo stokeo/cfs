@@ -474,8 +474,8 @@ def parse_args(args):
         'user and the root user.')
     parser.add_argument(
         "--dirty-block-upload-delay", action="store", type=int,
-        default=10, metavar='<seconds>',
-        help="Upload delay for dirty blocks in seconds (default: 10 seconds).")
+        default=1, metavar='<seconds>',
+        help="Upload delay for dirty blocks in seconds (default: 1 second).")
     parser.add_argument("--fg", action="store_true", default=False,
                         help="Do not daemonize, stay in foreground")
     parser.add_argument(
@@ -601,7 +601,7 @@ class CommitTask:
                     did_sth = True
 
             if not did_sth:
-                with trio.move_on_after(5):
+                with trio.move_on_after(1):
                     await self.stop_event.wait()
 
         log.debug('finished')

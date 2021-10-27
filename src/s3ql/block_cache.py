@@ -62,8 +62,8 @@ class CacheEntry(object):
     :pos: current position in file
     """
 
-    __slots__ = [ 'dirty', 'inode', 'blockno', 'last_write',
-                  'size', 'pos', 'fh', 'removed' ]
+    __slots__ = ['dirty', 'inode', 'blockno', 'last_write', 'size', 'pos',
+                 'fh', 'removed', 'cached_time']
 
     def __init__(self, inode, blockno, filename, mode='w+b'):
         super().__init__()

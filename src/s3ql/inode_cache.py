@@ -27,7 +27,7 @@ UPDATE_STR = ', '.join('%s=?' % x for x in UPDATE_ATTRS)
 class _Inode:
     '''An inode with its attributes'''
 
-    __slots__ = ATTRIBUTES + ('dirty', 'generation')
+    __slots__ = ATTRIBUTES + ('dirty', 'generation', 'cached_time')
 
     def __init__(self, generation):
         super().__init__()
@@ -92,11 +92,16 @@ class _Inode:
         # Force execution of sys.excepthook (exceptions raised
         # by __del__ are ignored)
         try:
-            raise RuntimeError('BUG ALERT: Dirty inode was destroyed!')
+            raise RuntimeError('BUG ALERT: Dirty inode {} was destroyed!'
+                               .format(self.id))
         except RuntimeError:
             exc_info = sys.exc_info()
 
         sys.excepthook(*exc_info)
+
+    def cache_timedout(self):
+        return (self.cached_time + CACHE_TIMEOUT
+                < datetime.datetime.now(datetime.timezone.utc))
 
 
 class InodeCache(object):
@@ -160,6 +165,7 @@ class InodeCache(object):
         try:
             if (self.attrs[id_].cached_time + CACHE_TIMEOUT
                     < datetime.datetime.now(datetime.timezone.utc)):
+                del self.attrs[id_]
                 raise KeyError
             return self.attrs[id_]
         except KeyError:
@@ -178,6 +184,8 @@ class InodeCache(object):
                     # We may have deleted that inode
                     pass
                 else:
+                    # TODO Check if old_id = id_ ?
+                    log.debug("old_id %d ; new_id %d", old_id, id_)
                     del self.attrs[old_id]
                     self.setattr(old_inode)
             self.attrs[id_] = inode

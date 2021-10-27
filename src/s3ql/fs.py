@@ -111,7 +111,7 @@ class Operations(pyfuse3.Operations):
 
     supports_dot_lookup = True
     enable_acl = False
-    enable_writeback_cache = True
+    # enable_writeback_cache = True
 
     def __init__(self, block_cache, db, max_obj_size, inode_cache,
                  upload_task=None):
@@ -767,6 +767,7 @@ class Operations(pyfuse3.Operations):
                     self.broken_blocks[id_].add(last_block)
                     raise FUSEError(errno.EIO)
 
+        self.inodes.setattr(inode)
         return inode.entry_attributes()
 
     async def mknod(self, id_p, name, mode, rdev, ctx):
@@ -861,7 +862,9 @@ class Operations(pyfuse3.Operations):
                 #  behaviour is not defined in POSIX, we opt for an error
                 raise FUSEError(errno.EINVAL)
 
-        return pyfuse3.FileInfo(fh=id_, keep_cache=True)
+        return pyfuse3.FileInfo(
+            fh=id_,
+            keep_cache=not self.inodes[id_].cache_timedout())
 
     async def access(self, id_, mode, ctx):
         '''Check if requesting process has `mode` rights on `inode`.
