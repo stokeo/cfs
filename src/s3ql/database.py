@@ -42,12 +42,11 @@ class Connection(object):
             self.cluster = Cluster(hosts)
         else:
             self.cluster = Cluster()
-        self.conn = self.cluster.connect()
-        self.conn.execute("USE cfs")
+        self.conn = self.cluster.connect("cfs")
 
     def close(self):
-        return
-        # self.conn.close()
+        # return
+        self.conn.shutdown()
 
     def get_size(self):
         '''Return size of database file'''

@@ -163,9 +163,11 @@ class InodeCache(object):
 
     def __getitem__(self, id_):
         try:
-            if (self.attrs[id_].cached_time + CACHE_TIMEOUT
-                    < datetime.datetime.now(datetime.timezone.utc)):
-                del self.attrs[id_]
+            if self.attrs[id_].cache_timedout():
+                log.debug("cache expired for %d", id_)
+                self.setattr(self.attrs[id_])
+                self.attrs.pop(id_, None)
+                self.cached_rows[self.cached_rows.index(id_)] = None
                 raise KeyError
             return self.attrs[id_]
         except KeyError:
@@ -184,8 +186,6 @@ class InodeCache(object):
                     # We may have deleted that inode
                     pass
                 else:
-                    # TODO Check if old_id = id_ ?
-                    log.debug("old_id %d ; new_id %d", old_id, id_)
                     del self.attrs[old_id]
                     self.setattr(old_inode)
             self.attrs[id_] = inode
