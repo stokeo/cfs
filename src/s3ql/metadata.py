@@ -35,7 +35,8 @@ class MetadataBackend(object):
         self._metadata_upload_task = None
         self.requests = None
         self.prepared_requests = dict()
-        self.db = Connection(self.cachepath, [options.db_host])
+        self.db = Connection(self.cachepath, hosts=[options.db_host],
+                             keyspace=options.keyspace)
         if mkfs:
             self.nodeid = 1
             save_persistent_config({"nodeid": self.nodeid})

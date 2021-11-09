@@ -36,13 +36,13 @@ class Connection(object):
     :conn:     apsw connection object
     '''
 
-    def __init__(self, file_=None, hosts=None):
+    def __init__(self, file_=None, hosts=None, keyspace=None):
         """ file_ argument useful for sqlite or other file based database """
         if hosts:
             self.cluster = Cluster(hosts)
         else:
             self.cluster = Cluster()
-        self.conn = self.cluster.connect("cfs")
+        self.conn = self.cluster.connect(keyspace)
 
     def close(self):
         # return

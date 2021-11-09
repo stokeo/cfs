@@ -259,7 +259,7 @@ class ArgumentParser(argparse.ArgumentParser):
 
             # Validate configuration file
             fixed_keys = {'backend-login', 'backend-password', 'fs-passphrase',
-                          'storage-url', 'db-host'}
+                          'storage-url', 'db-host', 'keyspace'}
             unknown_keys = (set(ini_config.keys())
                             - {x.replace('_', '-') for x in options.__dict__.keys()}
                             - fixed_keys)

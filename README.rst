@@ -9,7 +9,7 @@
 CFS is a fork of S3QL aiming to give simultaneous mount ability and
 improve robustness with cyberattacks and hardware failures resistance.
 
-
+CFS uses Cassandra database instead of SQLite for metadata storage
 
 
 Original S3QL readme :
